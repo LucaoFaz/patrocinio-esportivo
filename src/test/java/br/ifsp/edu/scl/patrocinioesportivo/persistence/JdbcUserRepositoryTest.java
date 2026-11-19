@@ -119,10 +119,20 @@ class JdbcUserRepositoryTest {
         return Stream.of(
                 Arguments.of(new User(randomId, null, "Santos", "a@ifsp.edu.br", "hash", Role.USER)),
                 Arguments.of(new User(randomId, "Lucas", null, "b@ifsp.edu.br", "hash", Role.USER)),
-                Arguments.of(new User(randomId, null, "Santos", null, "hash", Role.USER)),
-                Arguments.of(new User(randomId, null, "Santos", "d@ifsp.edu.br", null, Role.USER))
+                Arguments.of(new User(randomId, "Lucas", "Santos", null, "hash", Role.USER)),
+                Arguments.of(new User(randomId, "Lucas", "Santos", "d@ifsp.edu.br", null, Role.USER))
         );
     }
 
 
+    @Test
+    @DisplayName("Deve rejeitr no banco a insercao de role fora do dominio USER e ADMIN")
+    void shouldRejectInvalidRoleByDatabaseCheckConstraint(){
+        assertThatThrownBy(()-> jdbcTemplate.update(
+                "INSERT INTO app_user (id, name, lastname, email, password, role) VALUES (?, ?, ?, ?, ?, ?)",
+                UUID.randomUUID().toString(), "Lucas", "Santos", "invalid@ifsp.edu.br", "hash", "GUEST"
+        )).isInstanceOf(DataAccessException.class);
+
+        assertThat(userRepository.findByEmail("invalid@ifsp.edu.br")).isEmpty();
+    }
 }
