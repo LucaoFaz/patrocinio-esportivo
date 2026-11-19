@@ -14,6 +14,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -89,6 +90,22 @@ class JdbcUserRepositoryTest {
         assertThat(persisted.getId()).isEqualTo(originalId);
         assertThat(persisted.getName()).isEqualTo("Original");
         assertThat(persisted.getRole()).isEqualTo(Role.USER);
+    }
+
+    @Test
+    @DisplayName("Deve rejeitar inserção de usuario com ID ja existente pela restrição de chave primária")
+    void shouldRejectUserWithDuplicatedPrimaryKeyId(){
+        UUID sameId = UUID.randomUUID();
+        User first = new User(sameId, "Primeiro", "User", "primeiro@ifsp.edu.br",
+                "hash1", Role.USER);
+        User second = new User(sameId, "Segundo", "User", "segundo@ifsp.edu.br",
+                "hash2", Role.USER);
+
+        userRepository.save(first);
+
+        assertThatThrownBy(()-> userRepository.save(second))
+                .isInstanceOf(DataAccessException.class);
+        assertThat(userRepository.findByEmail("segundo@ifsp.edu.br")).isEmpty();
     }
 
 }
