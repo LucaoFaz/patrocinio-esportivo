@@ -10,11 +10,13 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Tag("PersistenceTest")
 @Tag("IntegrationTest")
@@ -49,6 +51,20 @@ class JdbcPatrocinadorRepositoryTest {
     @DisplayName("Deve retornar falso quando o ID do patrocinador não existir no banco ou for nulo")
     void shouldReturnFalseWhenPatrocinadorDoesNotExistOrIdIsNull(Long id) {
         assertThat(patrocinadorRepository.existePorId(id)).isFalse();
+    }
+
+    @Test
+    @DisplayName("Deve rejeitar patrocinador com ID duplicado ou nome nulo pelas constraints da tabela")
+    void shouldRejectDuplicateIdOrNullNameInPatrocinadorTable() {
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO patrocinador (id, nome) VALUES (?, ?)", 20L, "Duplicado"))
+                .isInstanceOf(DataAccessException.class);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO patrocinador (id, nome) VALUES (?, ?)", 99L, null))
+                .isInstanceOf(DataAccessException.class);
+
+        assertThat(patrocinadorRepository.existePorId(99L)).isFalse();
     }
 }
 
