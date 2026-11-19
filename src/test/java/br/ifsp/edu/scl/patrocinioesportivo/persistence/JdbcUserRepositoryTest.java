@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -55,6 +57,16 @@ class JdbcUserRepositoryTest {
         assertThat(userfound.get().getEmail()).isEqualTo("seuze@ifsp.edu.br");
         assertThat(userfound.get().getPassword()).isEqualTo("senhaBoa123");
         assertThat(userfound.get().getRole()).isEqualTo(role);
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"naoexiste@ifsp.edu.br", "   ", "LUCAS@IFSP.EDU.BR"})
+    @DisplayName("Deve retornar vazio ao buscar por email nao registrado, vazio ou nulo")
+    void shouldReturnEmptyWhenEmailDoesNotExistOrIsInvalid(String emailBusca) {
+        userRepository.save(new User(UUID.randomUUID(), "Lucas", "Santos", "lucas@ifsp.edu.br", "hash", Role.USER));
+        var result = userRepository.findByEmail(emailBusca);
+        assertThat(result).isEmpty();
     }
 
 }
