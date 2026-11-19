@@ -7,12 +7,14 @@ import br.ifsp.edu.scl.patrocinioesportivo.support.SqliteTestDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
@@ -20,6 +22,7 @@ import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.*;
 
 
@@ -67,6 +70,25 @@ class JdbcUserRepositoryTest {
         userRepository.save(new User(UUID.randomUUID(), "Lucas", "Santos", "lucas@ifsp.edu.br", "hash", Role.USER));
         var result = userRepository.findByEmail(emailBusca);
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Deve rejeita usuario com email duplicado e manter o registrado original inalterado")
+    void shouldThrowDuplicateKeyExceptionWhenSavingDuplicateEmail(){
+        UUID originalId = UUID.randomUUID();
+        User original = new User(originalId, "Original", "User", "duplicado@ifsp.edu.br", "hash1", Role.USER);
+        User duplicado = new User(UUID.randomUUID(), "Outro", "Nome", "duplicado@ifsp.edu.br", "hash2", Role.ADMIN);
+
+        userRepository.save(original);
+
+        assertThatThrownBy(() -> userRepository.save(duplicado))
+                .isInstanceOf(DuplicateKeyException.class)
+                .hasMessageContaining("duplicado@ifsp.edu.br");
+
+        var persisted = userRepository.findByEmail("duplicado@ifsp.edu.br").orElseThrow();
+        assertThat(persisted.getId()).isEqualTo(originalId);
+        assertThat(persisted.getName()).isEqualTo("Original");
+        assertThat(persisted.getRole()).isEqualTo(Role.USER);
     }
 
 }
