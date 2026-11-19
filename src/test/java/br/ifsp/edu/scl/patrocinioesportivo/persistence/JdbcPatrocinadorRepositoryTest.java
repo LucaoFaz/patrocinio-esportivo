@@ -6,6 +6,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -38,6 +41,14 @@ class JdbcPatrocinadorRepositoryTest {
 
         assertThat(patrocinadorRepository.existePorId(20L)).isTrue();
         assertThat(patrocinadorRepository.existePorId(50L)).isTrue();
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(longs = {-1L, 0L, 999L})
+    @DisplayName("Deve retornar falso quando o ID do patrocinador não existir no banco ou for nulo")
+    void shouldReturnFalseWhenPatrocinadorDoesNotExistOrIdIsNull(Long id) {
+        assertThat(patrocinadorRepository.existePorId(id)).isFalse();
     }
 }
 
