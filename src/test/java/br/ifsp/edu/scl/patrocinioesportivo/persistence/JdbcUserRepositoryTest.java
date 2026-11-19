@@ -9,10 +9,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
-import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.*;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
@@ -21,6 +18,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -107,5 +105,24 @@ class JdbcUserRepositoryTest {
                 .isInstanceOf(DataAccessException.class);
         assertThat(userRepository.findByEmail("segundo@ifsp.edu.br")).isEmpty();
     }
+
+    @ParameterizedTest
+    @MethodSource("userWithNullRequiredColumn")
+    @DisplayName("Deve rejeitar usuário quando qualquer coluna not null do banco for nula")
+    void shouldRejectUserWhenRequiredColumIsNull(User invalidUser){
+        assertThatThrownBy(()-> userRepository.save(invalidUser))
+                .isInstanceOf(DataAccessException.class);
+    }
+
+    static Stream<Arguments> userWithNullRequiredColumn() {
+        UUID randomId = UUID.randomUUID();
+        return Stream.of(
+                Arguments.of(new User(randomId, null, "Santos", "a@ifsp.edu.br", "hash", Role.USER)),
+                Arguments.of(new User(randomId, "Lucas", null, "b@ifsp.edu.br", "hash", Role.USER)),
+                Arguments.of(new User(randomId, null, "Santos", null, "hash", Role.USER)),
+                Arguments.of(new User(randomId, null, "Santos", "d@ifsp.edu.br", null, Role.USER))
+        );
+    }
+
 
 }
