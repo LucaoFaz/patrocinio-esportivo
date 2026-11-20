@@ -10,11 +10,13 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Tag("PersistenceTest")
 @Tag("IntegrationTest")
@@ -48,5 +50,19 @@ class JdbcClubeRepositoryTest {
     @DisplayName("Deve retornar falso quando o ID do clube nao existir no banco ou for nulo")
     void shouldReturnFalseWhenClubeDoesNotExistOrIdIsNull(Long id) {
         assertThat(clubeRepository.existePorId(id)).isFalse();
+    }
+
+    @Test
+    @DisplayName("Deve rejeita clube com ID duplicado ou nome nulo pelas constraint da tabela")
+    void shouldRejectDuplicateIdOrNullNameInClubeTable() {
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO clube (id, nome) VALUES (?, ?)", 10L, "Clube Duplicado"))
+                .isInstanceOf(DataAccessException.class);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO clube (id, nome) VALUES (?, ?)", 99L, null))
+                .isInstanceOf(DataAccessException.class);
+
+        assertThat(clubeRepository.existePorId(99L)).isFalse();
     }
 }
