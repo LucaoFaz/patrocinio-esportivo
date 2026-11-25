@@ -32,4 +32,14 @@ public class CadastroTest extends BaseSeleniumTest
         var visaoGeral = new VisaoGeralPageObject(driver);
         assertThat(visaoGeral.titulo()).isEqualTo("Parcerias em movimento.");
     }
+
+    @Test
+    @DisplayName("Cadastro com senhas diferentes mostra mensagem de erro")
+    void naoDeveCadastrarComSenhasDiferentes()
+    {
+        var cadastro = new CadastroPageObject(driver);
+        cadastro.cadastrar("Ana", "Souza", "ana@teste.com", "Senha123!", "Outra123!");
+
+        assertThat(cadastro.mensagemErro()).isEqualTo("As senhas precisam ser iguais.");
+    }
 }
