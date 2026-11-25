@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.SoftAssertions.assertSoftly;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("demo")
@@ -77,6 +78,10 @@ public abstract class BaseApiIntegrationTest {
         return authenticationService.authenticate(new AuthRequest(email, DEFAULT_PASSWORD)).token();
     }
 
+    protected long criarPropostaPendente(String token) {
+        return criarPropostaPendente(token, new BigDecimal("1000.01"), 2, new BigDecimal("100.00"));
+    }
+
     protected long criarPropostaPendente(String token, BigDecimal valor, int duracaoMeses, BigDecimal meta) {
         LocalDate inicio = LocalDate.now();
         LocalDate termino = inicio.plusMonths(duracaoMeses);
@@ -95,5 +100,21 @@ public abstract class BaseApiIntegrationTest {
 
         assertThat(response.statusCode()).isEqualTo(HttpStatus.CREATED.value());
         return response.jsonPath().getLong("id");
+    }
+
+    protected void assertApiError(
+            Response response,
+            HttpStatus expectedStatus,
+            String expectedDeveloperMessage,
+            String expectedMessageContains
+    ) {
+        assertThat(response.statusCode()).isEqualTo(expectedStatus.value());
+        var json = response.jsonPath();
+        assertSoftly(softly -> {
+            softly.assertThat(json.getString("status")).isEqualTo(expectedStatus.name());
+            softly.assertThat(json.getString("developerMessage")).isEqualTo(expectedDeveloperMessage);
+            softly.assertThat(json.getString("message")).contains(expectedMessageContains);
+            softly.assertThat(json.getString("timestamp")).isNotBlank();
+        });
     }
 }

@@ -58,4 +58,35 @@ class PropostaCicloApiTest extends BaseApiIntegrationTest {
             softly.assertThat(persistido.getParcelas()).hasSize(2);
         });
     }
+
+    @Test
+    @DisplayName("POST /api/v1/propostas/{id}/aprovacao deve retornar 403 para USER e 401 sem token valido mantendo proposta pendente")
+    void shouldRejectApprovalForUserAndUnauthenticatedRequests() {
+        String userToken = authenticateAs(Role.USER);
+        long propostaId = criarPropostaPendente(userToken);
+
+        Response semToken = givenAnonymous()
+                .post("/api/v1/propostas/{id}/aprovacao", propostaId);
+
+        Response tokenInvalido = givenAuth("token-jwt-invalido")
+                .post("/api/v1/propostas/{id}/aprovacao", propostaId);
+
+        Response usuarioComum = givenAuth(userToken)
+                .post("/api/v1/propostas/{id}/aprovacao", propostaId);
+
+        assertApiError(
+                usuarioComum,
+                HttpStatus.FORBIDDEN,
+                "PermissaoNegadaError",
+                "diretor financeiro"
+        );
+
+        var persistido = contratoRepository.buscarPorId(propostaId).orElseThrow();
+        assertSoftly(softly -> {
+            softly.assertThat(semToken.statusCode()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+            softly.assertThat(tokenInvalido.statusCode()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+            softly.assertThat(persistido.getStatus()).isEqualTo(StatusContrato.PENDENTE);
+            softly.assertThat(persistido.getParcelas()).isEmpty();
+        });
+    }
 }
