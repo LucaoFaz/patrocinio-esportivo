@@ -301,4 +301,51 @@ class JdbcContratoDePatrocinioRepositoryTest {
                     .isZero();
         });
     }
+
+    @Test
+    @DisplayName("Deve rejeitar parcela duplicada e historico duplicado pelas chaves primarias compostas")
+    void shouldRejectDuplicateParcelaAndDuplicateHistoricoByCompositePrimaryKey() {
+        var parcela1 = ParcelaDePagamento.reconstituir(
+                1, new BigDecimal("500.00"), LocalDate.of(2026, 6, 1), false, null
+        );
+        var historico1 = new HistoricoDePeriodo(
+                new PeriodoContratual(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 6, 30)),
+                new MetaContratual(new BigDecimal("100.00")),
+                new BigDecimal("120.00"),
+                List.of()
+        );
+        Long contratoId = repository.salvar(ContratoTestFixtures.contratoAtivoComParcelas(
+                null, List.of(parcela1), List.of(historico1)
+        )).getId();
+
+        var contratoComParcelasDuplicadas = ContratoTestFixtures.contratoAtivoComParcelas(
+                contratoId,
+                List.of(
+                        ParcelaDePagamento.reconstituir(2, new BigDecimal("250.00"), LocalDate.of(2026, 6, 1), false, null),
+                        ParcelaDePagamento.reconstituir(2, new BigDecimal("250.00"), LocalDate.of(2026, 7, 1), false, null)
+                ),
+                List.of()
+        );
+
+        assertSoftly(softly -> {
+            softly.assertThatThrownBy(() -> jdbcTemplate.update(
+                    """
+                    INSERT INTO parcela_pagamento (contrato_id, ciclo, numero, valor, vencimento, paga, data_pagamento)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    contratoId, 0, 1, "999.00", "2026-07-01", 0, null
+            )).isInstanceOf(DataAccessException.class);
+
+            softly.assertThatThrownBy(() -> jdbcTemplate.update(
+                    """
+                    INSERT INTO historico_periodo (contrato_id, ciclo, inicio, termino, meta, exposicao_acumulada)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    contratoId, 1, "2025-07-01", "2025-12-31", "200.00", "150.00"
+            )).isInstanceOf(DataAccessException.class);
+
+            softly.assertThatThrownBy(() -> repository.salvar(contratoComParcelasDuplicadas))
+                    .isInstanceOf(DataAccessException.class);
+        });
+    }
 }
