@@ -27,4 +27,15 @@ public class LoginTest extends BaseSeleniumTest {
         var visaoGeral = new VisaoGeralPageObject(driver);
         assertThat(visaoGeral.titulo()).isEqualTo("Parcerias em movimento.");
     }
+
+
+    @Test
+    @DisplayName("Login com senha errada mostra mensagem de erro")
+    void naoDeveEntrarComSenhaErrada()
+    {
+        var login = new LoginPageObject(driver);
+        login.entrar(USUARIO, "senhaErrada123");
+
+        assertThat(login.mensagemErro()).isEqualTo("Credenciais inválidas.");
+    }
 }
