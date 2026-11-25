@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
@@ -228,5 +229,30 @@ class JdbcContratoDePatrocinioRepositoryTest {
                     .extracting(ParcelaDePagamento::getNumero)
                     .containsExactly(4, 6);
         });
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"APROVADO", "INVALIDO", "ativo", ""})
+    @DisplayName("Deve rejeitar status fora do dominio pela constraint CHECK de contrato_patrocinio")
+    void shouldRejectInvalidStatusByCheckConstraint(String statusInvalido) {
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO contrato_patrocinio
+                (clube_id, patrocinador_id, status, inicio, termino, meta, valor_total, exposicao_acumulada, multa_rescisoria)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                ContratoTestFixtures.CLUBE_DEMO_ID,
+                ContratoTestFixtures.PATROCINADOR_DEMO_ID,
+                statusInvalido,
+                "2026-01-01",
+                "2026-04-01",
+                "100.00",
+                "1000.00",
+                "0",
+                "0"
+        )).isInstanceOf(DataAccessException.class);
+
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM contrato_patrocinio", Integer.class))
+                .isZero();
     }
 }
