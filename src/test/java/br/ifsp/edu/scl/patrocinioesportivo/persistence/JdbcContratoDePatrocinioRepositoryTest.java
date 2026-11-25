@@ -348,4 +348,85 @@ class JdbcContratoDePatrocinioRepositoryTest {
                     .isInstanceOf(DataAccessException.class);
         });
     }
+
+    @Test
+    @DisplayName("Deve rejeitar chaves estrangeiras inexistentes e colunas obrigatorias nulas")
+    void shouldRejectInvalidForeignKeysAndNullMandatoryColumns() {
+        var periodo = new PeriodoContratual(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 4, 1));
+        var meta = new MetaContratual(new BigDecimal("100.00"));
+        var clubeInexistente = new ContratoDePatrocinio(
+                StatusContrato.PENDENTE, periodo, meta, new BigDecimal("1000.00"),
+                999L, ContratoTestFixtures.PATROCINADOR_DEMO_ID
+        );
+        var patrocinadorInexistente = new ContratoDePatrocinio(
+                StatusContrato.PENDENTE, periodo, meta, new BigDecimal("1000.00"),
+                ContratoTestFixtures.CLUBE_DEMO_ID, 888L
+        );
+
+        Long contratoValidoId = repository.salvar(ContratoTestFixtures.contratoPendente(
+                new BigDecimal("1000.00"), new BigDecimal("100.00")
+        )).getId();
+
+        assertSoftly(softly -> {
+            softly.assertThat(jdbcTemplate.queryForObject("PRAGMA foreign_keys", Integer.class))
+                    .isEqualTo(1);
+
+            softly.assertThatThrownBy(() -> repository.salvar(clubeInexistente))
+                    .isInstanceOf(DataAccessException.class);
+            softly.assertThat(clubeInexistente.getId()).isNull();
+
+            softly.assertThatThrownBy(() -> repository.salvar(patrocinadorInexistente))
+                    .isInstanceOf(DataAccessException.class);
+            softly.assertThat(patrocinadorInexistente.getId()).isNull();
+
+            softly.assertThatThrownBy(() -> jdbcTemplate.update(
+                    """
+                    INSERT INTO parcela_pagamento (contrato_id, ciclo, numero, valor, vencimento, paga, data_pagamento)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    99999L, 0, 1, "500.00", "2026-06-01", 0, null
+            )).isInstanceOf(DataAccessException.class);
+
+            softly.assertThatThrownBy(() -> jdbcTemplate.update(
+                    """
+                    INSERT INTO historico_periodo (contrato_id, ciclo, inicio, termino, meta, exposicao_acumulada)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    99999L, 1, "2025-01-01", "2025-06-30", "100.00", "80.00"
+            )).isInstanceOf(DataAccessException.class);
+
+            softly.assertThatThrownBy(() -> jdbcTemplate.update(
+                    """
+                    INSERT INTO contrato_patrocinio
+                    (clube_id, patrocinador_id, status, inicio, termino, meta, valor_total, exposicao_acumulada, multa_rescisoria)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ContratoTestFixtures.CLUBE_DEMO_ID, ContratoTestFixtures.PATROCINADOR_DEMO_ID,
+                    "PENDENTE", "2026-01-01", "2026-04-01", null, "1000.00", "0", "0"
+            )).isInstanceOf(DataAccessException.class);
+
+            softly.assertThatThrownBy(() -> jdbcTemplate.update(
+                    """
+                    INSERT INTO parcela_pagamento (contrato_id, ciclo, numero, valor, vencimento, paga, data_pagamento)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    contratoValidoId, 0, 1, null, "2026-06-01", 0, null
+            )).isInstanceOf(DataAccessException.class);
+
+            softly.assertThatThrownBy(() -> jdbcTemplate.update(
+                    """
+                    INSERT INTO historico_periodo (contrato_id, ciclo, inicio, termino, meta, exposicao_acumulada)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    contratoValidoId, 1, null, "2025-06-30", "100.00", "80.00"
+            )).isInstanceOf(DataAccessException.class);
+
+            softly.assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM contrato_patrocinio", Integer.class))
+                    .isEqualTo(1);
+            softly.assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM parcela_pagamento", Integer.class))
+                    .isZero();
+            softly.assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM historico_periodo", Integer.class))
+                    .isZero();
+        });
+    }
 }
