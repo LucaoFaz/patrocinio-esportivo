@@ -1,5 +1,6 @@
 package br.ifsp.edu.scl.patrocinioesportivo.persistence;
 
+import br.ifsp.edu.scl.patrocinioesportivo.exception.ContratoInexistenteError;
 import br.ifsp.edu.scl.patrocinioesportivo.model.ContratoDePatrocinio;
 import br.ifsp.edu.scl.patrocinioesportivo.model.HistoricoDePeriodo;
 import br.ifsp.edu.scl.patrocinioesportivo.model.MetaContratual;
@@ -22,6 +23,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.SoftAssertions.assertSoftly;
 
 @Tag("PersistenceTest")
@@ -133,6 +135,31 @@ class JdbcContratoDePatrocinioRepositoryTest {
             softly.assertThat(cicloSalvo.parcelas().getFirst().getNumero()).isEqualTo(1);
             softly.assertThat(cicloSalvo.parcelas().getFirst().isPaga()).isTrue();
             softly.assertThat(cicloSalvo.parcelas().getFirst().getDataPagamento()).isEqualTo(LocalDate.of(2026, 1, 30));
+        });
+    }
+
+    @Test
+    @DisplayName("Deve lancar ContratoInexistenteError ao tentar atualizar contrato com ID inexistente")
+    void shouldThrowContratoInexistenteErrorWhenUpdatingNonExistentId() {
+        var parcela = ParcelaDePagamento.reconstituir(
+                1, new BigDecimal("500.00"), LocalDate.of(2026, 6, 1), false, null
+        );
+        var contratoInexistente = ContratoTestFixtures.contratoAtivoComParcelas(
+                9999L, List.of(parcela), List.of()
+        );
+
+        assertThatThrownBy(() -> repository.salvar(contratoInexistente))
+                .isInstanceOf(ContratoInexistenteError.class)
+                .hasMessage("Contrato não encontrado.");
+
+        assertSoftly(softly -> {
+            softly.assertThat(repository.buscarPorId(9999L)).isEmpty();
+            softly.assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM contrato_patrocinio", Integer.class))
+                    .isZero();
+            softly.assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM parcela_pagamento", Integer.class))
+                    .isZero();
+            softly.assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM historico_periodo", Integer.class))
+                    .isZero();
         });
     }
 }
