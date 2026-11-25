@@ -162,4 +162,71 @@ class JdbcContratoDePatrocinioRepositoryTest {
                     .isZero();
         });
     }
+
+    @Test
+    @DisplayName("Deve retornar parcelas ordenadas por numero e historico ordenado por ciclo mesmo inseridos fora de ordem")
+    void shouldReturnParcelasOrderedByNumeroAndHistoricoOrderedByCiclo() {
+        var salvo = repository.salvar(ContratoTestFixtures.contratoAtivoComParcelas(null, List.of(), List.of()));
+        Long contratoId = salvo.getId();
+
+        jdbcTemplate.update(
+                "INSERT INTO historico_periodo (contrato_id, ciclo, inicio, termino, meta, exposicao_acumulada) VALUES (?, ?, ?, ?, ?, ?)",
+                contratoId, 2, "2025-07-01", "2025-12-31", "200.00", "210.00"
+        );
+        jdbcTemplate.update(
+                "INSERT INTO historico_periodo (contrato_id, ciclo, inicio, termino, meta, exposicao_acumulada) VALUES (?, ?, ?, ?, ?, ?)",
+                contratoId, 1, "2025-01-01", "2025-06-30", "100.00", "110.00"
+        );
+
+        jdbcTemplate.update(
+                "INSERT INTO parcela_pagamento (contrato_id, ciclo, numero, valor, vencimento, paga, data_pagamento) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                contratoId, 0, 12, "400.00", null, 0, null
+        );
+        jdbcTemplate.update(
+                "INSERT INTO parcela_pagamento (contrato_id, ciclo, numero, valor, vencimento, paga, data_pagamento) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                contratoId, 0, 10, "400.00", "2026-06-01", 1, "2026-05-28"
+        );
+        jdbcTemplate.update(
+                "INSERT INTO parcela_pagamento (contrato_id, ciclo, numero, valor, vencimento, paga, data_pagamento) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                contratoId, 0, 11, "400.00", "2026-07-01", 0, null
+        );
+
+        jdbcTemplate.update(
+                "INSERT INTO parcela_pagamento (contrato_id, ciclo, numero, valor, vencimento, paga, data_pagamento) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                contratoId, 1, 3, "300.00", "2025-03-01", 1, "2025-03-01"
+        );
+        jdbcTemplate.update(
+                "INSERT INTO parcela_pagamento (contrato_id, ciclo, numero, valor, vencimento, paga, data_pagamento) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                contratoId, 1, 1, "300.00", "2025-01-31", 1, "2025-01-30"
+        );
+        jdbcTemplate.update(
+                "INSERT INTO parcela_pagamento (contrato_id, ciclo, numero, valor, vencimento, paga, data_pagamento) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                contratoId, 2, 6, "350.00", "2025-09-01", 1, "2025-09-01"
+        );
+        jdbcTemplate.update(
+                "INSERT INTO parcela_pagamento (contrato_id, ciclo, numero, valor, vencimento, paga, data_pagamento) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                contratoId, 2, 4, "350.00", "2025-07-31", 1, "2025-07-30"
+        );
+
+        var persistido = repository.buscarPorId(contratoId).orElseThrow();
+        assertThat(persistido.getHistorico()).hasSize(2);
+
+        assertSoftly(softly -> {
+            softly.assertThat(persistido.getParcelas())
+                    .extracting(ParcelaDePagamento::getNumero)
+                    .containsExactly(10, 11, 12);
+            softly.assertThat(persistido.getParcelas().getLast().getVencimento()).isNull();
+            softly.assertThat(persistido.getParcelas().getLast().getDataPagamento()).isNull();
+
+            softly.assertThat(persistido.getHistorico())
+                    .extracting(h -> h.periodo().inicio())
+                    .containsExactly(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 7, 1));
+            softly.assertThat(persistido.getHistorico().get(0).parcelas())
+                    .extracting(ParcelaDePagamento::getNumero)
+                    .containsExactly(1, 3);
+            softly.assertThat(persistido.getHistorico().get(1).parcelas())
+                    .extracting(ParcelaDePagamento::getNumero)
+                    .containsExactly(4, 6);
+        });
+    }
 }
