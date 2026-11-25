@@ -22,4 +22,9 @@ public class NovaPropostaPageObject extends BasePageObject
         driver.findElement(By.name("termino")).sendKeys(termino);
         driver.findElement(By.cssSelector("form button")).click();
     }
+
+    public String mensagemErro()
+    {
+        return aguardaElemento(By.cssSelector("[role='alert']")).getText();
+    }
 }

@@ -29,4 +29,16 @@ public class PropostaTest extends BaseSeleniumTest {
         var contrato = new ContratoPageObject(driver);
         assertThat(contrato.status()).isEqualTo("Pendente");
     }
+
+    @Test
+    @DisplayName("Proposta com data de termino antes do inicio")
+    void propostaComTerminoAntesDoInicio()
+    {
+        var visaoGeral = new VisaoGeralPageObject(driver);
+        var novaProposta = visaoGeral.navegarNovaProposta();
+
+        novaProposta.criar("10", "20", "6000", "100", "01072027", "01012027");
+
+        assertThat(novaProposta.mensagemErro()).isEqualTo("A data de término precisa ser posterior à data de início.");
+    }
 }
