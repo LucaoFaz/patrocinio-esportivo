@@ -14,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.dao.DataAccessException;
@@ -254,5 +255,50 @@ class JdbcContratoDePatrocinioRepositoryTest {
 
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM contrato_patrocinio", Integer.class))
                 .isZero();
+    }
+
+    @ParameterizedTest(name = "parcela invalida: ciclo={0}, numero={1}, paga={2}")
+    @CsvSource({
+            "-1, 1, 0",
+            "0, 0, 0",
+            "0, -3, 1",
+            "0, 1, -1",
+            "0, 1, 2"
+    })
+    @DisplayName("Deve rejeitar valores invalidos pelas constraints CHECK de parcela_pagamento e historico_periodo")
+    void shouldRejectInvalidCheckValuesInParcelaAndHistorico(int ciclo, int numero, int paga) {
+        Long contratoId = repository.salvar(ContratoTestFixtures.contratoAtivoComParcelas(null, List.of(), List.of()))
+                .getId();
+
+        assertSoftly(softly -> {
+            softly.assertThatThrownBy(() -> jdbcTemplate.update(
+                    """
+                    INSERT INTO parcela_pagamento (contrato_id, ciclo, numero, valor, vencimento, paga, data_pagamento)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    contratoId, ciclo, numero, "500.00", "2026-06-01", paga, null
+            )).isInstanceOf(DataAccessException.class);
+
+            softly.assertThatThrownBy(() -> jdbcTemplate.update(
+                    """
+                    INSERT INTO historico_periodo (contrato_id, ciclo, inicio, termino, meta, exposicao_acumulada)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    contratoId, 0, "2025-01-01", "2025-06-30", "100.00", "50.00"
+            )).isInstanceOf(DataAccessException.class);
+
+            softly.assertThatThrownBy(() -> jdbcTemplate.update(
+                    """
+                    INSERT INTO historico_periodo (contrato_id, ciclo, inicio, termino, meta, exposicao_acumulada)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    contratoId, -1, "2025-01-01", "2025-06-30", "100.00", "50.00"
+            )).isInstanceOf(DataAccessException.class);
+
+            softly.assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM parcela_pagamento", Integer.class))
+                    .isZero();
+            softly.assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM historico_periodo", Integer.class))
+                    .isZero();
+        });
     }
 }
