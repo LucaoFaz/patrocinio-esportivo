@@ -38,4 +38,14 @@ public class LoginTest extends BaseSeleniumTest {
 
         assertThat(login.mensagemErro()).isEqualTo("Credenciais inválidas.");
     }
+
+    @Test
+    @DisplayName("Link do login leva para a tela de cadastro")
+    void deveNavegarParaCadastro()
+    {
+        var login = new LoginPageObject(driver);
+        var cadastro = login.navegarCadastro();
+
+        assertThat(cadastro.titulo()).isEqualTo("Faça parte do jogo.");
+    }
 }

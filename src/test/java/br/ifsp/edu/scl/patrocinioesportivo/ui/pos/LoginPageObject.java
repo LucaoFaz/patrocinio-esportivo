@@ -19,6 +19,12 @@ public class LoginPageObject extends BasePageObject {
         driver.findElement(By.cssSelector("form button")).click();
     }
 
+    public CadastroPageObject navegarCadastro()
+    {
+        driver.findElement(By.linkText("Cadastre-se")).click();
+        return new CadastroPageObject(driver);
+    }
+
     public String mensagemErro()
     {
         return aguardaElemento(By.cssSelector("[role='alert']")).getText();
