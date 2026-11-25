@@ -429,4 +429,58 @@ class JdbcContratoDePatrocinioRepositoryTest {
                     .isZero();
         });
     }
+
+    @Test
+    @DisplayName("Deve remover parcelas e historico em cascata ao deletar contrato sem afetar outros contratos")
+    void shouldDeleteParcelasAndHistoricoOnCascadeWhenContratoIsDeleted() {
+        var parcelaAtualAlvo = ParcelaDePagamento.reconstituir(
+                2, new BigDecimal("600.00"), LocalDate.of(2026, 6, 1), false, null
+        );
+        var parcelaHistoricoAlvo = ParcelaDePagamento.reconstituir(
+                1, new BigDecimal("600.00"), LocalDate.of(2025, 6, 1), true, LocalDate.of(2025, 5, 30)
+        );
+        var historicoAlvo = new HistoricoDePeriodo(
+                new PeriodoContratual(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 6, 30)),
+                new MetaContratual(new BigDecimal("100.00")),
+                new BigDecimal("110.00"),
+                List.of(parcelaHistoricoAlvo)
+        );
+        Long alvoId = repository.salvar(ContratoTestFixtures.contratoAtivoComParcelas(
+                null, List.of(parcelaAtualAlvo), List.of(historicoAlvo)
+        )).getId();
+
+        var parcelaOutro = ParcelaDePagamento.reconstituir(
+                1, new BigDecimal("800.00"), LocalDate.of(2026, 7, 1), false, null
+        );
+        var historicoOutro = new HistoricoDePeriodo(
+                new PeriodoContratual(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 6, 30)),
+                new MetaContratual(new BigDecimal("150.00")),
+                new BigDecimal("160.00"),
+                List.of()
+        );
+        Long outroId = repository.salvar(ContratoTestFixtures.contratoAtivoComParcelas(
+                null, List.of(parcelaOutro), List.of(historicoOutro)
+        )).getId();
+
+        int deletados = jdbcTemplate.update("DELETE FROM contrato_patrocinio WHERE id = ?", alvoId);
+
+        assertSoftly(softly -> {
+            softly.assertThat(deletados).isEqualTo(1);
+            softly.assertThat(repository.buscarPorId(alvoId)).isEmpty();
+            softly.assertThat(jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM parcela_pagamento WHERE contrato_id = ?", Integer.class, alvoId
+            )).isZero();
+            softly.assertThat(jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM historico_periodo WHERE contrato_id = ?", Integer.class, alvoId
+            )).isZero();
+
+            softly.assertThat(repository.buscarPorId(outroId)).isPresent();
+            softly.assertThat(jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM parcela_pagamento WHERE contrato_id = ?", Integer.class, outroId
+            )).isEqualTo(1);
+            softly.assertThat(jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM historico_periodo WHERE contrato_id = ?", Integer.class, outroId
+            )).isEqualTo(1);
+        });
+    }
 }
