@@ -8,6 +8,9 @@ import org.openqa.selenium.chrome.ChromeDriver;
 public class BaseSeleniumTest 
 {
     protected static final String URL_FRONT = "http://127.0.0.1:5173/";
+    protected static final String USUARIO = "teste@teste.com";
+    protected static final String DIRETOR = "teste2@teste.com";
+    protected static final String SENHA = "Senha123!";
     protected WebDriver driver;
 
     @BeforeEach
