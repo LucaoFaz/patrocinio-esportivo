@@ -17,4 +17,10 @@ public class VisaoGeralPageObject extends BasePageObject {
         driver.findElement(By.name("id")).sendKeys(numero);
         driver.findElement(By.cssSelector("form button")).click();
     }
+
+    public NovaPropostaPageObject navegarNovaProposta()
+    {
+        driver.findElement(By.partialLinkText("Nova proposta")).click();
+        return new NovaPropostaPageObject(driver);
+    }
 }
