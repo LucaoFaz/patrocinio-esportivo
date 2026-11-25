@@ -21,4 +21,17 @@ public class ResponsividadeTest extends BaseSeleniumTest
 
         assertThat(login.arteVisivel()).isFalse();
     }
+
+    @Test
+    @DisplayName("Login em tela grande mostra a arte")
+    void loginEmTelaGrande()
+    {
+        driver.manage().window().setSize(new Dimension(1400, 900));
+
+        driver.get(URL_FRONT + "#/entrar");
+
+        var login = new LoginPageObject(driver);
+
+        assertThat(login.arteVisivel()).isTrue();
+    }
 }
