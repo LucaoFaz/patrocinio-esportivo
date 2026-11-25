@@ -16,12 +16,17 @@ public class BasePageObject {
         this.driver = driver;
     }
 
-    protected void esperarTitulo(String titulo) 
+    public String titulo()
+    {
+        return driver.findElement(By.tagName("h1")).getText();
+    }
+
+    protected void aguardaTitulo(String titulo) 
     {
         new WebDriverWait(driver, Duration.ofSeconds(10)).until(ExpectedConditions.textToBe(By.tagName("h1"), titulo));
     }
 
-    protected WebElement esperarElemento(By localizador) 
+    protected WebElement aguardaElemento(By localizador) 
     {
         return new WebDriverWait(driver, Duration.ofSeconds(10)).until(ExpectedConditions.visibilityOfElementLocated(localizador));
     }

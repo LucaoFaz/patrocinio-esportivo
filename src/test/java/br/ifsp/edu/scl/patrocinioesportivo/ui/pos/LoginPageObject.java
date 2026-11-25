@@ -9,7 +9,7 @@ public class LoginPageObject extends BasePageObject {
     public LoginPageObject(WebDriver driver)
     {
         super(driver);
-        esperarTitulo(TITULO);
+        aguardaTitulo(TITULO);
     }
 
     public void entrar(String email, String senha)
@@ -19,8 +19,8 @@ public class LoginPageObject extends BasePageObject {
         driver.findElement(By.cssSelector("form button")).click();
     }
 
-    public String mensagemDeErro()
+    public String mensagemErro()
     {
-        return esperarElemento(By.cssSelector("[role='alert']")).getText();
+        return aguardaElemento(By.cssSelector("[role='alert']")).getText();
     }
 }
