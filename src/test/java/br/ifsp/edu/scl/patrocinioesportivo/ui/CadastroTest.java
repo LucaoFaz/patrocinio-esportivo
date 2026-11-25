@@ -10,8 +10,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Tag("UiTest")
-public class CadastroTest extends BaseSeleniumTest 
-{
+public class CadastroTest extends BaseSeleniumTest {
     private final Faker faker = new Faker();
 
     @Override
@@ -41,5 +40,15 @@ public class CadastroTest extends BaseSeleniumTest
         cadastro.cadastrar("Ana", "Souza", "ana@teste.com", "Senha123!", "Outra123!");
 
         assertThat(cadastro.mensagemErro()).isEqualTo("As senhas precisam ser iguais.");
+    }
+
+    @Test
+    @DisplayName("Cadastro com email repetido")
+    void avisaQueEmailJaExisteRepeticao()
+    {
+        var cadastro = new CadastroPageObject(driver);
+        cadastro.cadastrar("Ana", "Souza", USUARIO, "Senha123!", "Senha123!");
+
+        assertThat(cadastro.mensagemErro()).contains("já cadastrado");
     }
 }
