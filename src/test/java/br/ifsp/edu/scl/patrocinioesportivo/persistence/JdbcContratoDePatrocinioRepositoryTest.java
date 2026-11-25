@@ -7,6 +7,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
@@ -53,5 +56,13 @@ class JdbcContratoDePatrocinioRepositoryTest {
         assertThat(persistido.getMultaRescisoria()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(persistido.getParcelas()).isEmpty();
         assertThat(persistido.getHistorico()).isEmpty();
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(longs = {-1L, 0L, 999999L})
+    @DisplayName("Deve retornar vazio ao buscar contrato por ID inexistente ou nulo")
+    void shouldReturnEmptyWhenSearchingNonExistentContratoId(Long id) {
+        assertThat(repository.buscarPorId(id)).isEmpty();
     }
 }
