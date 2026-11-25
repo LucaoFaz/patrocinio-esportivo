@@ -34,4 +34,15 @@ public class ContratoTest extends BaseSeleniumTest {
 
         assertThat(contrato.mensagemModal()).isEqualTo("Apenas o diretor financeiro pode aprovar propostas.");
     }
+
+    @Test
+    @DisplayName("Diretor financeiro aprova a proposta")
+    void aprovarComoDiretorFinanceiro()
+    {
+        var contrato = criarProposta(DIRETOR);
+        contrato.aprovar();
+
+        assertThat(contrato.mensagemSucesso()).isEqualTo("Proposta aprovada. O contrato está ativo.");
+        assertThat(contrato.status()).isEqualTo("Ativo");
+    }
 }

@@ -28,4 +28,10 @@ public class ContratoPageObject extends BasePageObject
     {
         return aguardaElemento(By.cssSelector("dialog [role='alert']")).getText();
     }
+
+    public String mensagemSucesso()
+    {
+        aguardaSumir(By.tagName("dialog"));
+        return driver.findElement(By.className("success")).getText();
+    }
 }

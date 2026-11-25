@@ -4,6 +4,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
+import org.openqa.selenium.chrome.ChromeOptions;
+import java.util.Map;
 
 public class BaseSeleniumTest 
 {
@@ -16,7 +18,11 @@ public class BaseSeleniumTest
     @BeforeEach
     public void setUp() 
     {
-        driver = new ChromeDriver();
+        var opcoes = new ChromeOptions();
+        opcoes.setExperimentalOption("prefs", Map.of("profile.password_manager_leak_detection", false));
+       
+       
+        driver = new ChromeDriver(opcoes);
         setInitialPage();
     }
     @AfterEach
