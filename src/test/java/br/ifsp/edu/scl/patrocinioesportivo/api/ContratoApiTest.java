@@ -19,6 +19,7 @@ import org.springframework.http.HttpStatus;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.SoftAssertions.assertSoftly;
@@ -271,7 +272,47 @@ class ContratoApiTest extends BaseApiIntegrationTest {
             );
         });
     }
+
+    @ParameterizedTest
+    @EnumSource(value = StatusContrato.class, names = {"ATIVO", "EM_RISCO"})
+    @DisplayName("POST /api/v1/contratos/{id}/exposicoes deve retornar 200 e acumular exposicao em contrato ATIVO ou EM_RISCO")
+    void shouldRegisterAndAccumulateMediaExposureForActiveAndAtRiskContracts(StatusContrato status) {
+        String userToken = authenticateAs(Role.USER);
+        LocalDate hoje = LocalDate.now();
+        long contratoId = salvarContratoReconstituido(
+                status,
+                hoje.minusMonths(1),
+                hoje.plusMonths(2),
+                new BigDecimal("100.00"),
+                new BigDecimal("1000.00"),
+                BigDecimal.ZERO,
+                List.of(ParcelaDePagamento.reconstituir(1, new BigDecimal("1000.00"), hoje.plusDays(15), false, null)),
+                List.of()
+        );
+
+        Response primeira = givenAuth(userToken)
+                .body(Map.of("valor", new BigDecimal("35.50")))
+                .post("/api/v1/contratos/{id}/exposicoes", contratoId);
+        assertThat(primeira.statusCode()).isEqualTo(HttpStatus.OK.value());
+
+        Response segunda = givenAuth(userToken)
+                .body(Map.of("valor", new BigDecimal("64.75")))
+                .post("/api/v1/contratos/{id}/exposicoes", contratoId);
+        assertThat(segunda.statusCode()).isEqualTo(HttpStatus.OK.value());
+
+        var persistido = contratoRepository.buscarPorId(contratoId).orElseThrow();
+        assertSoftly(softly -> {
+            softly.assertThat(primeira.jsonPath().getObject("exposicaoAcumulada", BigDecimal.class))
+                    .isEqualByComparingTo("35.50");
+            softly.assertThat(segunda.jsonPath().getLong("id")).isEqualTo(contratoId);
+            softly.assertThat(segunda.jsonPath().getString("status")).isEqualTo(status.name());
+            softly.assertThat(segunda.jsonPath().getObject("exposicaoAcumulada", BigDecimal.class))
+                    .isEqualByComparingTo("100.25");
+            softly.assertThat(persistido.getExposicaoAcumulada()).isEqualByComparingTo("100.25");
+        });
+    }
 }
+
 
 
 
