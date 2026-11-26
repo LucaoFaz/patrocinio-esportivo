@@ -186,4 +186,34 @@ public class AuthApiTest {
                 Arguments.of(new AuthRequest("valido@ifsp.edu.br", ""))
         );
     }
+
+    @Test
+    @DisplayName("Deve retornar 401 e um payload de erro ao autenticar com senha incorret ou email nao existente")
+    void shouldReturn401WhenCredentialsAreInvalid() throws Exception {
+        String email = UUID.randomUUID() + "@ifsp.edu.br";
+        var registerRequest = new RegisterUserRequest("Lucas", "Santos", email, "SenhaCorreta123!");
+
+        mvc.perform(post("/api/v1/register")
+                        .contentType(APPLICATION_JSON)
+                        .content(json.writeValueAsString(registerRequest)))
+                        .andExpect(status().isCreated());
+
+        var wrongPasswordRequest = new AuthRequest(email, "SenhaErrada999!");
+        mvc.perform(post("/api/v1/authenticate")
+                        .contentType(APPLICATION_JSON)
+                        .content(json.writeValueAsString(wrongPasswordRequest)))
+                        .andExpect(status().isUnauthorized())
+                        .andExpect(jsonPath("$.status").value("UNAUTHORIZED"))
+                        .andExpect(jsonPath("$.message").value("Credenciais inválidas."))
+                        .andExpect(jsonPath("$.error").isNotEmpty());
+
+        var unknownEmailRequest = new AuthRequest("naoexiste-" + UUID.randomUUID() + "@ifsp.edu.br", "SenhaCorreta123!");
+        mvc.perform(post("/api/v1/authenticate")
+                        .contentType(APPLICATION_JSON)
+                        .content(json.writeValueAsString(unknownEmailRequest)))
+                        .andExpect(status().isUnauthorized())
+                        .andExpect(jsonPath("$.status").value("UNAUTHORIZED"))
+                        .andExpect(jsonPath("$.message").value("Credenciais inválidas."))
+                        .andExpect(jsonPath("$.error").isNotEmpty());
+    }
 }
