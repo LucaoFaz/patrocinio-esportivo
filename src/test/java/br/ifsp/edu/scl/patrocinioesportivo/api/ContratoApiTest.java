@@ -12,6 +12,8 @@ import io.restassured.response.Response;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
@@ -134,5 +136,54 @@ class ContratoApiTest extends BaseApiIntegrationTest {
             );
         });
     }
+
+    @ParameterizedTest
+    @EnumSource(value = StatusContrato.class, names = {"ATIVO", "EM_RISCO"})
+    @DisplayName("POST /api/v1/contratos/{id}/parcelas/{numero}/pagamentos deve retornar 200 e quitar parcela atrasada em contrato ATIVO ou EM_RISCO")
+    void shouldRegisterInstallmentPaymentForActiveAndAtRiskContracts(StatusContrato status) {
+        String userToken = authenticateAs(Role.USER);
+        LocalDate hoje = LocalDate.now();
+
+        var parcelaAtrasada = ParcelaDePagamento.reconstituir(
+                1, new BigDecimal("500.00"), hoje.minusDays(3), false, null
+        );
+        var parcelaFutura = ParcelaDePagamento.reconstituir(
+                2, new BigDecimal("500.00"), hoje.plusDays(25), false, null
+        );
+        long contratoId = salvarContratoReconstituido(
+                status,
+                hoje.minusMonths(1),
+                hoje.plusMonths(1),
+                new BigDecimal("200.00"),
+                new BigDecimal("1000.00"),
+                BigDecimal.ZERO,
+                List.of(parcelaAtrasada, parcelaFutura),
+                List.of()
+        );
+
+        Response response = givenAuth(userToken)
+                .post("/api/v1/contratos/{id}/parcelas/{numero}/pagamentos", contratoId, 1);
+
+        assertThat(response.statusCode()).isEqualTo(HttpStatus.OK.value());
+        var json = response.jsonPath();
+        var persistido = contratoRepository.buscarPorId(contratoId).orElseThrow();
+
+        assertSoftly(softly -> {
+            softly.assertThat(json.getLong("id")).isEqualTo(contratoId);
+            softly.assertThat(json.getString("status")).isEqualTo(status.name());
+            softly.assertThat(json.getInt("parcelas[0].numero")).isEqualTo(1);
+            softly.assertThat(json.getBoolean("parcelas[0].paga")).isTrue();
+            softly.assertThat(json.getString("parcelas[0].dataPagamento")).isEqualTo(hoje.toString());
+            softly.assertThat(json.getBoolean("parcelas[0].emAtraso")).isFalse();
+            softly.assertThat(json.getInt("parcelas[1].numero")).isEqualTo(2);
+            softly.assertThat(json.getBoolean("parcelas[1].paga")).isFalse();
+            softly.assertThat(json.getString("parcelas[1].dataPagamento")).isNull();
+
+            softly.assertThat(persistido.getParcelas().get(0).isPaga()).isTrue();
+            softly.assertThat(persistido.getParcelas().get(0).getDataPagamento()).isEqualTo(hoje);
+            softly.assertThat(persistido.getParcelas().get(1).isPaga()).isFalse();
+        });
+    }
 }
+
 
