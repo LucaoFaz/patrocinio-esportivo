@@ -1,5 +1,11 @@
 package br.ifsp.edu.scl.patrocinioesportivo.support;
 
+import br.ifsp.edu.scl.patrocinioesportivo.model.ContratoDePatrocinio;
+import br.ifsp.edu.scl.patrocinioesportivo.model.HistoricoDePeriodo;
+import br.ifsp.edu.scl.patrocinioesportivo.model.MetaContratual;
+import br.ifsp.edu.scl.patrocinioesportivo.model.ParcelaDePagamento;
+import br.ifsp.edu.scl.patrocinioesportivo.model.PeriodoContratual;
+import br.ifsp.edu.scl.patrocinioesportivo.model.StatusContrato;
 import br.ifsp.edu.scl.patrocinioesportivo.repository.ContratoDePatrocinioRepository;
 import br.ifsp.edu.scl.patrocinioesportivo.security.auth.AuthRequest;
 import br.ifsp.edu.scl.patrocinioesportivo.security.auth.AuthenticationService;
@@ -22,6 +28,7 @@ import org.springframework.test.context.DynamicPropertySource;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -100,6 +107,32 @@ public abstract class BaseApiIntegrationTest {
 
         assertThat(response.statusCode()).isEqualTo(HttpStatus.CREATED.value());
         return response.jsonPath().getLong("id");
+    }
+
+    protected long salvarContratoReconstituido(
+            StatusContrato status,
+            LocalDate inicio,
+            LocalDate termino,
+            BigDecimal meta,
+            BigDecimal valorTotal,
+            BigDecimal exposicaoAcumulada,
+            List<ParcelaDePagamento> parcelas,
+            List<HistoricoDePeriodo> historico
+    ) {
+        var contrato = ContratoDePatrocinio.reconstituir(
+                null,
+                status,
+                new PeriodoContratual(inicio, termino),
+                new MetaContratual(meta),
+                valorTotal,
+                ContratoTestFixtures.CLUBE_DEMO_ID,
+                ContratoTestFixtures.PATROCINADOR_DEMO_ID,
+                exposicaoAcumulada,
+                BigDecimal.ZERO,
+                parcelas,
+                historico
+        );
+        return contratoRepository.salvar(contrato).getId();
     }
 
     protected void assertApiError(
