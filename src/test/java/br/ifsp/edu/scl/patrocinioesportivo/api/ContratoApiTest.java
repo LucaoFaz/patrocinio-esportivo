@@ -457,7 +457,87 @@ class ContratoApiTest extends BaseApiIntegrationTest {
             softly.assertThat(persistidoQuitado.getMultaRescisoria()).isEqualByComparingTo("0");
         });
     }
+
+    @Test
+    @DisplayName("POST /api/v1/contratos/{id}/encerramento deve retornar 401, 404 e 409 em cenarios invalidos")
+    void shouldRejectContractTerminationForUnauthorizedNotFoundAndConflictCases() {
+        String adminToken = authenticateAs(Role.ADMIN);
+        String userToken = authenticateAs(Role.USER);
+
+        long encerradoId = criarContratoAtivo(adminToken);
+        givenAuth(userToken)
+                .post("/api/v1/contratos/{id}/encerramento", encerradoId)
+                .then()
+                .statusCode(HttpStatus.OK.value());
+
+        long pendenteId = criarPropostaPendente(userToken);
+
+        long canceladoId = criarPropostaPendente(userToken);
+        givenAuth(userToken)
+                .post("/api/v1/propostas/{id}/cancelamento", canceladoId)
+                .then()
+                .statusCode(HttpStatus.OK.value());
+
+        long recusadoId = criarPropostaPendente(userToken);
+        givenAuth(adminToken)
+                .post("/api/v1/propostas/{id}/recusa", recusadoId)
+                .then()
+                .statusCode(HttpStatus.OK.value());
+
+        Response semToken = givenAnonymous()
+                .post("/api/v1/contratos/{id}/encerramento", encerradoId);
+        Response inexistente = givenAuth(userToken)
+                .post("/api/v1/contratos/{id}/encerramento", 999999L);
+        Response jaEncerrado = givenAuth(userToken)
+                .post("/api/v1/contratos/{id}/encerramento", encerradoId);
+        Response pendente = givenAuth(userToken)
+                .post("/api/v1/contratos/{id}/encerramento", pendenteId);
+        Response cancelado = givenAuth(userToken)
+                .post("/api/v1/contratos/{id}/encerramento", canceladoId);
+        Response recusado = givenAuth(userToken)
+                .post("/api/v1/contratos/{id}/encerramento", recusadoId);
+
+        assertSoftly(softly -> {
+            softly.assertThat(semToken.statusCode()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+            assertApiError(
+                    softly,
+                    inexistente,
+                    HttpStatus.NOT_FOUND,
+                    "ContratoInexistenteError",
+                    "Contrato não encontrado"
+            );
+            assertApiError(
+                    softly,
+                    jaEncerrado,
+                    HttpStatus.CONFLICT,
+                    "OperacaoRedundanteError",
+                    "já está encerrado"
+            );
+            assertApiError(
+                    softly,
+                    pendente,
+                    HttpStatus.CONFLICT,
+                    "TransicaoDeStatusInvalidaError",
+                    "ativos ou em risco"
+            );
+            assertApiError(
+                    softly,
+                    cancelado,
+                    HttpStatus.CONFLICT,
+                    "TransicaoDeStatusInvalidaError",
+                    "ativos ou em risco"
+            );
+            assertApiError(
+                    softly,
+                    recusado,
+                    HttpStatus.CONFLICT,
+                    "TransicaoDeStatusInvalidaError",
+                    "ativos ou em risco"
+            );
+        });
+    }
 }
+
 
 
 
