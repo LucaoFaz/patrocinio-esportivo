@@ -394,7 +394,71 @@ class ContratoApiTest extends BaseApiIntegrationTest {
             softly.assertThat(persistido.getExposicaoAcumulada()).isEqualByComparingTo("0");
         });
     }
+
+    @Test
+    @DisplayName("POST /api/v1/contratos/{id}/encerramento deve retornar 200 com multa de 20% sobre parcelas pendentes e multa zero quando quitado")
+    void shouldTerminateContractCalculatingPenaltyForUnpaidAndZeroForFullyPaid() {
+        String userToken = authenticateAs(Role.USER);
+        LocalDate hoje = LocalDate.now();
+
+        long comPendenciasId = salvarContratoReconstituido(
+                StatusContrato.ATIVO,
+                hoje.minusMonths(2),
+                hoje.plusMonths(2),
+                new BigDecimal("200.00"),
+                new BigDecimal("1050.00"),
+                BigDecimal.ZERO,
+                List.of(
+                        ParcelaDePagamento.reconstituir(1, new BigDecimal("300.00"), hoje.minusMonths(1), true, hoje.minusMonths(1)),
+                        ParcelaDePagamento.reconstituir(2, new BigDecimal("400.00"), hoje.plusDays(10), false, null),
+                        ParcelaDePagamento.reconstituir(3, new BigDecimal("350.00"), hoje.plusMonths(1), false, null)
+                ),
+                List.of()
+        );
+
+        long quitadoEmRiscoId = salvarContratoReconstituido(
+                StatusContrato.EM_RISCO,
+                hoje.minusMonths(2),
+                hoje.plusMonths(1),
+                new BigDecimal("200.00"),
+                new BigDecimal("1000.00"),
+                new BigDecimal("50.00"),
+                List.of(
+                        ParcelaDePagamento.reconstituir(1, new BigDecimal("500.00"), hoje.minusMonths(1), true, hoje.minusMonths(1)),
+                        ParcelaDePagamento.reconstituir(2, new BigDecimal("500.00"), hoje, true, hoje)
+                ),
+                List.of()
+        );
+
+        Response respComPendencias = givenAuth(userToken)
+                .post("/api/v1/contratos/{id}/encerramento", comPendenciasId);
+        assertThat(respComPendencias.statusCode()).isEqualTo(HttpStatus.OK.value());
+
+        Response respQuitado = givenAuth(userToken)
+                .post("/api/v1/contratos/{id}/encerramento", quitadoEmRiscoId);
+        assertThat(respQuitado.statusCode()).isEqualTo(HttpStatus.OK.value());
+
+        var persistidoComPendencias = contratoRepository.buscarPorId(comPendenciasId).orElseThrow();
+        var persistidoQuitado = contratoRepository.buscarPorId(quitadoEmRiscoId).orElseThrow();
+
+        assertSoftly(softly -> {
+            softly.assertThat(respComPendencias.jsonPath().getLong("id")).isEqualTo(comPendenciasId);
+            softly.assertThat(respComPendencias.jsonPath().getString("status")).isEqualTo("ENCERRADO");
+            softly.assertThat(respComPendencias.jsonPath().getObject("multaRescisoria", BigDecimal.class))
+                    .isEqualByComparingTo("150.00");
+            softly.assertThat(persistidoComPendencias.getStatus()).isEqualTo(StatusContrato.ENCERRADO);
+            softly.assertThat(persistidoComPendencias.getMultaRescisoria()).isEqualByComparingTo("150.00");
+
+            softly.assertThat(respQuitado.jsonPath().getLong("id")).isEqualTo(quitadoEmRiscoId);
+            softly.assertThat(respQuitado.jsonPath().getString("status")).isEqualTo("ENCERRADO");
+            softly.assertThat(respQuitado.jsonPath().getObject("multaRescisoria", BigDecimal.class))
+                    .isEqualByComparingTo("0");
+            softly.assertThat(persistidoQuitado.getStatus()).isEqualTo(StatusContrato.ENCERRADO);
+            softly.assertThat(persistidoQuitado.getMultaRescisoria()).isEqualByComparingTo("0");
+        });
+    }
 }
+
 
 
 
