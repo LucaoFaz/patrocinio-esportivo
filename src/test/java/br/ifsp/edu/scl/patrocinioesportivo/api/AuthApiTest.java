@@ -7,6 +7,9 @@ import br.ifsp.edu.scl.patrocinioesportivo.support.SqliteTestDatabase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -18,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
@@ -76,5 +80,29 @@ public class AuthApiTest {
         assertThat(persistedUser.get().getRole()).isEqualTo(Role.USER);
         assertThat(persistedUser.get().getPassword()).isNotEqualTo("SenhaForte123!");
         assertThat(passwordEncoder.matches("SenhaForte123!", persistedUser.get().getPassword())).isTrue();
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidRegisterRequests")
+    @DisplayName("Deve retornar 400 e payload de erro quando dados de cadastro forem inválidos")
+    void shouldReturn400WhenRegisterPayloadIsInvalid(RegisterUserRequest invalidRequest) throws Exception{
+        mvc.perform(post("/api/v1/register")
+                .contentType(APPLICATION_JSON)
+                .content(json.writeValueAsString(invalidRequest)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value("BAD_REQUEST"))
+                .andExpect(jsonPath("$.error").value("MethodArgumentNotValidException"))
+                .andExpect(jsonPath("$.message").isNotEmpty());
+    }
+
+    static Stream<Arguments> invalidRegisterRequests() {
+        return Stream.of(
+                Arguments.of(new RegisterUserRequest(null, "Santos", "valido@ifsp.edu.br", "Senha123!")),
+                Arguments.of(new RegisterUserRequest(" ", "Santos", "valido@ifsp.edu.br", "Senha123!")),
+                Arguments.of(new RegisterUserRequest("Lucas", "", "valido@ifsp.edu.br", "Senha123!")),
+                Arguments.of(new RegisterUserRequest("Lucas", "Santos", "", "Senha123!")),
+                Arguments.of(new RegisterUserRequest("Lucas", "Santos", "email-nao-validor", "Senha123!")),
+                Arguments.of(new RegisterUserRequest("Lucas", "Santos", "valido@ifsp.edu.br", ""))
+        );
     }
 }
