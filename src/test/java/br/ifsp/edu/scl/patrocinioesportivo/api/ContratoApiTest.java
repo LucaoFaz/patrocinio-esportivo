@@ -598,7 +598,62 @@ class ContratoApiTest extends BaseApiIntegrationTest {
             softly.assertThat(persistido.getHistorico()).hasSize(1);
         });
     }
+
+    @Test
+    @DisplayName("POST /api/v1/contratos/{id}/renovacao deve retornar 200 com status EM_RISCO sem alterar ciclo quando meta nao foi atingida")
+    void shouldMarkContractAsAtRiskWhenRenewalTargetIsNotMetKeepingCurrentCycleUnchanged() {
+        String userToken = authenticateAs(Role.USER);
+        LocalDate terminoAnterior = LocalDate.now().withDayOfMonth(1).minusDays(1);
+        LocalDate inicioAnterior = terminoAnterior.minusMonths(2);
+
+        long contratoId = salvarContratoReconstituido(
+                StatusContrato.ATIVO,
+                inicioAnterior,
+                terminoAnterior,
+                new BigDecimal("100.00"),
+                new BigDecimal("900.00"),
+                new BigDecimal("99.99"),
+                List.of(
+                        ParcelaDePagamento.reconstituir(1, new BigDecimal("450.00"), inicioAnterior.plusMonths(1), true, inicioAnterior.plusMonths(1)),
+                        ParcelaDePagamento.reconstituir(2, new BigDecimal("450.00"), terminoAnterior, true, terminoAnterior)
+                ),
+                List.of()
+        );
+
+        Response response = givenAuth(userToken)
+                .body(Map.of(
+                        "duracaoMeses", 3,
+                        "novaMeta", new BigDecimal("250.00")
+                ))
+                .post("/api/v1/contratos/{id}/renovacao", contratoId);
+
+        assertThat(response.statusCode()).isEqualTo(HttpStatus.OK.value());
+        var json = response.jsonPath();
+        var persistido = contratoRepository.buscarPorId(contratoId).orElseThrow();
+
+        assertSoftly(softly -> {
+            softly.assertThat(json.getLong("id")).isEqualTo(contratoId);
+            softly.assertThat(json.getString("status")).isEqualTo("EM_RISCO");
+            softly.assertThat(json.getString("inicio")).isEqualTo(inicioAnterior.toString());
+            softly.assertThat(json.getString("termino")).isEqualTo(terminoAnterior.toString());
+            softly.assertThat(json.getObject("meta", BigDecimal.class)).isEqualByComparingTo("100.00");
+            softly.assertThat(json.getObject("exposicaoAcumulada", BigDecimal.class)).isEqualByComparingTo("99.99");
+            softly.assertThat(json.getList("parcelas.numero", Integer.class)).containsExactly(1, 2);
+            softly.assertThat(json.getList("parcelas.paga", Boolean.class)).containsExactly(true, true);
+            softly.assertThat(json.getList("historico")).isEmpty();
+
+            softly.assertThat(persistido.getStatus()).isEqualTo(StatusContrato.EM_RISCO);
+            softly.assertThat(persistido.getPeriodoContratual().inicio()).isEqualTo(inicioAnterior);
+            softly.assertThat(persistido.getPeriodoContratual().termino()).isEqualTo(terminoAnterior);
+            softly.assertThat(persistido.getExposicaoAcumulada()).isEqualByComparingTo("99.99");
+            softly.assertThat(persistido.getHistorico()).isEmpty();
+            softly.assertThat(persistido.getParcelas())
+                    .extracting(ParcelaDePagamento::getNumero)
+                    .containsExactly(1, 2);
+        });
+    }
 }
+
 
 
 
