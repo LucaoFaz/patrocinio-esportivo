@@ -263,6 +263,49 @@ class PropostaApiTest extends BaseApiIntegrationTest {
             );
         });
     }
+
+    @Test
+    @DisplayName("PUT /api/v1/propostas/{id} deve retornar 200 e persistir novos dados da proposta PENDENTE")
+    void shouldEditPendingProposalReturning200AndPersistingUpdatedValues() {
+        String userToken = authenticateAs(Role.USER);
+        long propostaId = criarPropostaPendente(userToken, new BigDecimal("1000.00"), 2, new BigDecimal("100.00"));
+
+        LocalDate novoInicio = LocalDate.now().plusDays(5);
+        LocalDate novoTermino = novoInicio.plusMonths(6);
+
+        Response response = givenAuth(userToken)
+                .body(Map.of(
+                        "valor", new BigDecimal("3750.90"),
+                        "inicio", novoInicio.toString(),
+                        "termino", novoTermino.toString(),
+                        "meta", new BigDecimal("420.25")
+                ))
+                .put("/api/v1/propostas/{id}", propostaId);
+
+        assertThat(response.statusCode()).isEqualTo(HttpStatus.OK.value());
+        var json = response.jsonPath();
+        var persistida = contratoRepository.buscarPorId(propostaId).orElseThrow();
+
+        assertSoftly(softly -> {
+            softly.assertThat(json.getLong("id")).isEqualTo(propostaId);
+            softly.assertThat(json.getLong("clubeId")).isEqualTo(ContratoTestFixtures.CLUBE_DEMO_ID);
+            softly.assertThat(json.getLong("patrocinadorId")).isEqualTo(ContratoTestFixtures.PATROCINADOR_DEMO_ID);
+            softly.assertThat(json.getString("status")).isEqualTo("PENDENTE");
+            softly.assertThat(json.getObject("valorTotal", BigDecimal.class)).isEqualByComparingTo("3750.90");
+            softly.assertThat(json.getString("inicio")).isEqualTo(novoInicio.toString());
+            softly.assertThat(json.getString("termino")).isEqualTo(novoTermino.toString());
+            softly.assertThat(json.getObject("meta", BigDecimal.class)).isEqualByComparingTo("420.25");
+            softly.assertThat(json.getList("parcelas")).isEmpty();
+            softly.assertThat(json.getList("historico")).isEmpty();
+
+            softly.assertThat(persistida.getStatus()).isEqualTo(StatusContrato.PENDENTE);
+            softly.assertThat(persistida.getValorTotal()).isEqualByComparingTo("3750.90");
+            softly.assertThat(persistida.getPeriodoContratual().inicio()).isEqualTo(novoInicio);
+            softly.assertThat(persistida.getPeriodoContratual().termino()).isEqualTo(novoTermino);
+            softly.assertThat(persistida.getMetaContratual().valor()).isEqualByComparingTo("420.25");
+        });
+    }
 }
+
 
 
