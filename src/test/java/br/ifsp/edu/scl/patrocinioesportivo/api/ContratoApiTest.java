@@ -738,7 +738,94 @@ class ContratoApiTest extends BaseApiIntegrationTest {
             );
         });
     }
+
+    @Test
+    @DisplayName("POST /api/v1/contratos/{id}/renovacao deve retornar 401, 404 e 409 para nao autenticado, inexistente, pendencia financeira e status invalido")
+    void shouldRejectContractRenewalForUnauthorizedNotFoundAndConflictCases() {
+        String userToken = authenticateAs(Role.USER);
+        LocalDate terminoAnterior = LocalDate.now().withDayOfMonth(1).minusDays(1);
+        LocalDate inicioAnterior = terminoAnterior.minusMonths(2);
+
+        long comPendenciaId = salvarContratoReconstituido(
+                StatusContrato.ATIVO,
+                inicioAnterior,
+                terminoAnterior,
+                new BigDecimal("100.00"),
+                new BigDecimal("900.00"),
+                new BigDecimal("150.00"),
+                List.of(
+                        ParcelaDePagamento.reconstituir(1, new BigDecimal("450.00"), inicioAnterior.plusMonths(1), true, inicioAnterior.plusMonths(1)),
+                        ParcelaDePagamento.reconstituir(2, new BigDecimal("450.00"), terminoAnterior, false, null)
+                ),
+                List.of()
+        );
+        long pendenteId = criarPropostaPendente(userToken);
+        long encerradoId = salvarContratoReconstituido(
+                StatusContrato.ENCERRADO,
+                inicioAnterior,
+                terminoAnterior,
+                new BigDecimal("100.00"),
+                new BigDecimal("900.00"),
+                new BigDecimal("150.00"),
+                List.of(ParcelaDePagamento.reconstituir(1, new BigDecimal("900.00"), terminoAnterior, true, terminoAnterior)),
+                List.of()
+        );
+
+        Map<String, Object> bodyValido = Map.of(
+                "duracaoMeses", 3,
+                "novaMeta", new BigDecimal("200.00")
+        );
+
+        Response semToken = givenAnonymous()
+                .body(bodyValido)
+                .post("/api/v1/contratos/{id}/renovacao", comPendenciaId);
+        Response inexistente = givenAuth(userToken)
+                .body(bodyValido)
+                .post("/api/v1/contratos/{id}/renovacao", 999999L);
+        Response pendenciaFinanceira = givenAuth(userToken)
+                .body(bodyValido)
+                .post("/api/v1/contratos/{id}/renovacao", comPendenciaId);
+        Response contratoPendente = givenAuth(userToken)
+                .body(bodyValido)
+                .post("/api/v1/contratos/{id}/renovacao", pendenteId);
+        Response contratoEncerrado = givenAuth(userToken)
+                .body(bodyValido)
+                .post("/api/v1/contratos/{id}/renovacao", encerradoId);
+
+        assertSoftly(softly -> {
+            softly.assertThat(semToken.statusCode()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+            assertApiError(
+                    softly,
+                    inexistente,
+                    HttpStatus.NOT_FOUND,
+                    "ContratoInexistenteError",
+                    "Contrato não encontrado"
+            );
+            assertApiError(
+                    softly,
+                    pendenciaFinanceira,
+                    HttpStatus.CONFLICT,
+                    "PendenciaFinanceiraError",
+                    "pendências financeiras"
+            );
+            assertApiError(
+                    softly,
+                    contratoPendente,
+                    HttpStatus.CONFLICT,
+                    "TransicaoDeStatusInvalidaError",
+                    "ativos ou em risco"
+            );
+            assertApiError(
+                    softly,
+                    contratoEncerrado,
+                    HttpStatus.CONFLICT,
+                    "TransicaoDeStatusInvalidaError",
+                    "ativos ou em risco"
+            );
+        });
+    }
 }
+
 
 
 
