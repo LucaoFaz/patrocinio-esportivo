@@ -105,4 +105,31 @@ public class AuthApiTest {
                 Arguments.of(new RegisterUserRequest("Lucas", "Santos", "valido@ifsp.edu.br", ""))
         );
     }
+
+    @Test
+    @DisplayName("Deve retornar 409 e manter usuario original ao tentar cadastrar email duplicado")
+    void shouldReturn409WhenRegisteringDuplicateEmail() throws Exception{
+        String email = UUID.randomUUID() + "@ifsp.edu.br";
+        var firstRequest = new RegisterUserRequest("Original", "User", email, "Senha123!");
+        var duplicateRequest = new RegisterUserRequest("Impostor", "Outro", email, "OutraSenha99!");
+
+        mvc.perform(post("/api/v1/register")
+                .contentType(APPLICATION_JSON)
+                .content(json.writeValueAsString(firstRequest)
+                ))
+                .andExpect(status().isCreated());
+
+        mvc.perform(post("/api/v1/register")
+                .contentType(APPLICATION_JSON)
+                .content(json.writeValueAsString(duplicateRequest)
+                ))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value("CONFLICT"))
+                .andExpect(jsonPath("$.error").value("EntityAlreadyExistsException"))
+                .andExpect(jsonPath("$.message").value("Email already registered: " + email));
+
+        var persisted = userRepository.findByEmail(email).orElseThrow();
+        assertThat(persisted.getName()).isEqualTo("Original");
+        assertThat(persisted.getLastname()).isEqualTo("User");
+    }
 }
