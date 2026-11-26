@@ -184,6 +184,94 @@ class ContratoApiTest extends BaseApiIntegrationTest {
             softly.assertThat(persistido.getParcelas().get(1).isPaga()).isFalse();
         });
     }
+
+    @Test
+    @DisplayName("POST /api/v1/contratos/{id}/parcelas/{numero}/pagamentos deve retornar 401, 400, 404 e 409 em cenarios invalidos")
+    void shouldRejectInstallmentPaymentForInvalidAuthParamsNotFoundAndConflictCases() {
+        String adminToken = authenticateAs(Role.ADMIN);
+        String userToken = authenticateAs(Role.USER);
+        long contratoAtivoId = criarContratoAtivo(adminToken);
+        long pendenteId = criarPropostaPendente(userToken);
+
+        LocalDate hoje = LocalDate.now();
+        long encerradoId = salvarContratoReconstituido(
+                StatusContrato.ENCERRADO,
+                hoje.minusMonths(2),
+                hoje.plusMonths(1),
+                new BigDecimal("100.00"),
+                new BigDecimal("500.00"),
+                BigDecimal.ZERO,
+                List.of(ParcelaDePagamento.reconstituir(1, new BigDecimal("500.00"), hoje.plusDays(10), false, null)),
+                List.of()
+        );
+
+        givenAuth(userToken)
+                .post("/api/v1/contratos/{id}/parcelas/{numero}/pagamentos", contratoAtivoId, 1)
+                .then()
+                .statusCode(HttpStatus.OK.value());
+
+        Response semToken = givenAnonymous()
+                .post("/api/v1/contratos/{id}/parcelas/{numero}/pagamentos", contratoAtivoId, 2);
+        Response numeroInvalido = givenAuth(userToken)
+                .post("/api/v1/contratos/{id}/parcelas/{numero}/pagamentos", contratoAtivoId, "abc");
+        Response contratoInexistente = givenAuth(userToken)
+                .post("/api/v1/contratos/{id}/parcelas/{numero}/pagamentos", 999999L, 1);
+        Response parcelaInexistente = givenAuth(userToken)
+                .post("/api/v1/contratos/{id}/parcelas/{numero}/pagamentos", contratoAtivoId, 99);
+        Response parcelaJaPaga = givenAuth(userToken)
+                .post("/api/v1/contratos/{id}/parcelas/{numero}/pagamentos", contratoAtivoId, 1);
+        Response contratoPendente = givenAuth(userToken)
+                .post("/api/v1/contratos/{id}/parcelas/{numero}/pagamentos", pendenteId, 1);
+        Response contratoEncerrado = givenAuth(userToken)
+                .post("/api/v1/contratos/{id}/parcelas/{numero}/pagamentos", encerradoId, 1);
+
+        assertSoftly(softly -> {
+            softly.assertThat(semToken.statusCode()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+            assertApiError(
+                    softly,
+                    numeroInvalido,
+                    HttpStatus.BAD_REQUEST,
+                    "MethodArgumentTypeMismatchException",
+                    "Requisição inválida"
+            );
+            assertApiError(
+                    softly,
+                    contratoInexistente,
+                    HttpStatus.NOT_FOUND,
+                    "ContratoInexistenteError",
+                    "Contrato não encontrado"
+            );
+            assertApiError(
+                    softly,
+                    parcelaInexistente,
+                    HttpStatus.NOT_FOUND,
+                    "ParcelaInexistenteError",
+                    "Parcela não encontrada"
+            );
+            assertApiError(
+                    softly,
+                    parcelaJaPaga,
+                    HttpStatus.CONFLICT,
+                    "PagamentoJaRegistradoError",
+                    "já foi registrado"
+            );
+            assertApiError(
+                    softly,
+                    contratoPendente,
+                    HttpStatus.CONFLICT,
+                    "TransicaoDeStatusInvalidaError",
+                    "não permite registrar pagamentos"
+            );
+            assertApiError(
+                    softly,
+                    contratoEncerrado,
+                    HttpStatus.CONFLICT,
+                    "TransicaoDeStatusInvalidaError",
+                    "não permite registrar pagamentos"
+            );
+        });
+    }
 }
+
 
 

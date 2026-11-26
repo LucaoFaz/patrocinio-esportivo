@@ -109,6 +109,14 @@ public abstract class BaseApiIntegrationTest {
         return response.jsonPath().getLong("id");
     }
 
+    protected long criarContratoAtivo(String adminToken) {
+        long propostaId = criarPropostaPendente(adminToken);
+        Response response = givenAuth(adminToken)
+                .post("/api/v1/propostas/{id}/aprovacao", propostaId);
+        assertThat(response.statusCode()).isEqualTo(HttpStatus.OK.value());
+        return propostaId;
+    }
+
     protected long salvarContratoReconstituido(
             StatusContrato status,
             LocalDate inicio,
