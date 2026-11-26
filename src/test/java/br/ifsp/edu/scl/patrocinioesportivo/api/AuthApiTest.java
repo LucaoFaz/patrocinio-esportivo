@@ -27,8 +27,9 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 
 @Tag("ApiTest")
 @Tag("IntegrationTest")
@@ -215,5 +216,36 @@ public class AuthApiTest {
                         .andExpect(jsonPath("$.status").value("UNAUTHORIZED"))
                         .andExpect(jsonPath("$.message").value("Credenciais inválidas."))
                         .andExpect(jsonPath("$.error").isNotEmpty());
+    }
+
+    @Test
+    @DisplayName("Deve retornar 200 e saudaçao com ID do usuario ao acessar hello com token valid")
+    void shouldReturn200WithGreetingAndUserIdWhenAuthenticated() throws Exception {
+        String email = UUID.randomUUID() + "@ifsp.edu.br";
+        var registerRequest = new RegisterUserRequest("Lucas", "Santos", email, "SenhaForte123!");
+
+        String registerResponse = mvc.perform(post("/api/v1/register")
+                        .contentType(APPLICATION_JSON)
+                        .content(json.writeValueAsString(registerRequest)
+                        ))
+                        .andExpect(status().isCreated())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString();
+
+        String userId = json.readTree(registerResponse).get("id").asText();
+        String authResponse = mvc.perform(post("/api/v1/authenticate")
+                        .contentType(APPLICATION_JSON)
+                        .content(json.writeValueAsString(new AuthRequest(email, "SenhaForte123!"))))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String token = json.readTree(authResponse).get("token").asText();
+
+        mvc.perform(get("/api/v1/hello")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(content().string("Hello: " + userId));
     }
 }
