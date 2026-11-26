@@ -123,4 +123,35 @@ class PropostaCicloApiTest extends BaseApiIntegrationTest {
                     .isEqualTo(StatusContrato.RECUSADO);
         });
     }
+
+    @Test
+    @DisplayName("POST /api/v1/propostas/{id}/recusa deve retornar 200 para ADMIN com status RECUSADO e sem parcelas")
+    void shouldRefuseProposalAsAdminAndPersistRecusadoStatus() {
+        String userToken = authenticateAs(Role.USER);
+        String adminToken = authenticateAs(Role.ADMIN);
+        long propostaId = criarPropostaPendente(userToken, new BigDecimal("2500.00"), 3, new BigDecimal("200.00"));
+
+        Response response = givenAuth(adminToken)
+                .post("/api/v1/propostas/{id}/recusa", propostaId);
+
+        assertThat(response.statusCode()).isEqualTo(HttpStatus.OK.value());
+        var json = response.jsonPath();
+        var persistido = contratoRepository.buscarPorId(propostaId).orElseThrow();
+
+        assertSoftly(softly -> {
+            softly.assertThat(json.getLong("id")).isEqualTo(propostaId);
+            softly.assertThat(json.getLong("clubeId")).isEqualTo(ContratoTestFixtures.CLUBE_DEMO_ID);
+            softly.assertThat(json.getLong("patrocinadorId")).isEqualTo(ContratoTestFixtures.PATROCINADOR_DEMO_ID);
+            softly.assertThat(json.getString("status")).isEqualTo("RECUSADO");
+            softly.assertThat(json.getObject("valorTotal", BigDecimal.class)).isEqualByComparingTo("2500.00");
+            softly.assertThat(json.getObject("meta", BigDecimal.class)).isEqualByComparingTo("200.00");
+            softly.assertThat(json.getObject("exposicaoAcumulada", BigDecimal.class)).isEqualByComparingTo("0");
+            softly.assertThat(json.getObject("multaRescisoria", BigDecimal.class)).isEqualByComparingTo("0");
+            softly.assertThat(json.getList("parcelas")).isEmpty();
+            softly.assertThat(json.getList("historico")).isEmpty();
+
+            softly.assertThat(persistido.getStatus()).isEqualTo(StatusContrato.RECUSADO);
+            softly.assertThat(persistido.getParcelas()).isEmpty();
+        });
+    }
 }
