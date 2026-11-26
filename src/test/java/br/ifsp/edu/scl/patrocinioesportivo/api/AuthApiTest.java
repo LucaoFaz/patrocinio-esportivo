@@ -1,5 +1,6 @@
 package br.ifsp.edu.scl.patrocinioesportivo.api;
 
+import br.ifsp.edu.scl.patrocinioesportivo.security.auth.AuthRequest;
 import br.ifsp.edu.scl.patrocinioesportivo.security.auth.RegisterUserRequest;
 import br.ifsp.edu.scl.patrocinioesportivo.security.user.Role;
 import br.ifsp.edu.scl.patrocinioesportivo.security.user.UserRepository;
@@ -104,5 +105,115 @@ public class AuthApiTest {
                 Arguments.of(new RegisterUserRequest("Lucas", "Santos", "email-nao-validor", "Senha123!")),
                 Arguments.of(new RegisterUserRequest("Lucas", "Santos", "valido@ifsp.edu.br", ""))
         );
+    }
+
+    @Test
+    @DisplayName("Deve retornar 409 e manter usuario original ao tentar cadastrar email duplicado")
+    void shouldReturn409WhenRegisteringDuplicateEmail() throws Exception{
+        String email = UUID.randomUUID() + "@ifsp.edu.br";
+        var firstRequest = new RegisterUserRequest("Original", "User", email, "Senha123!");
+        var duplicateRequest = new RegisterUserRequest("Impostor", "Outro", email, "OutraSenha99!");
+
+        mvc.perform(post("/api/v1/register")
+                .contentType(APPLICATION_JSON)
+                .content(json.writeValueAsString(firstRequest)
+                ))
+                .andExpect(status().isCreated());
+
+        mvc.perform(post("/api/v1/register")
+                .contentType(APPLICATION_JSON)
+                .content(json.writeValueAsString(duplicateRequest)
+                ))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value("CONFLICT"))
+                .andExpect(jsonPath("$.error").value("EntityAlreadyExistsException"))
+                .andExpect(jsonPath("$.message").value("Email already registered: " + email));
+
+        var persisted = userRepository.findByEmail(email).orElseThrow();
+        assertThat(persisted.getName()).isEqualTo("Original");
+        assertThat(persisted.getLastname()).isEqualTo("User");
+    }
+
+    @Test
+    @DisplayName("Deve autenticar usuário com credenciais validas retornando 200 e token JWT no payload")
+    void shouldAuthenticateValidUserAndReturn200WithJwtToken() throws Exception {
+        String email = UUID.randomUUID() + "@ifsp.edu.br";
+        var registerRequest = new RegisterUserRequest("Lucas", "Santos", email, "SenhaForte123!");
+
+        mvc.perform(post("/api/v1/register")
+                        .contentType(APPLICATION_JSON)
+                        .content(json.writeValueAsString(registerRequest)
+                        ))
+                        .andExpect(status().isCreated());
+
+        var authRequest = new AuthRequest(email, "SenhaForte123!");
+
+        String responseBody = mvc.perform(post("/api/v1/authenticate")
+                        .contentType(APPLICATION_JSON)
+                        .content(json.writeValueAsString(authRequest)
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isNotEmpty())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String token = json.readTree(responseBody).get("token").asText();
+        assertThat(token).isNotBlank();
+        assertThat(token.split("\\.")).hasSize(3);
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidAuthRequests")
+    @DisplayName("Deve retornar 400 e payload de erro quando dados de autenticação forem invalidos")
+    void shouldReturn400WhenAuthenticatePayloadIsInvalid(AuthRequest invalidRequest) throws Exception {
+        mvc.perform(post("/api/v1/authenticate")
+                        .contentType(APPLICATION_JSON)
+                        .content(json.writeValueAsString(invalidRequest)
+                        ))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value("BAD_REQUEST"))
+                        .andExpect(jsonPath("$.error").value("MethodArgumentNotValidException"))
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+    }
+
+    static Stream<Arguments> invalidAuthRequests() {
+        return Stream.of(
+                Arguments.of(new AuthRequest(null, "Senha123!")),
+                Arguments.of(new AuthRequest(" ", "Senha123!")),
+                Arguments.of(new AuthRequest("formato-nao-valido", "Senha123!")),
+                Arguments.of(new AuthRequest("valido@ifsp.edu.br", null)),
+                Arguments.of(new AuthRequest("valido@ifsp.edu.br", ""))
+        );
+    }
+
+    @Test
+    @DisplayName("Deve retornar 401 e um payload de erro ao autenticar com senha incorret ou email nao existente")
+    void shouldReturn401WhenCredentialsAreInvalid() throws Exception {
+        String email = UUID.randomUUID() + "@ifsp.edu.br";
+        var registerRequest = new RegisterUserRequest("Lucas", "Santos", email, "SenhaCorreta123!");
+
+        mvc.perform(post("/api/v1/register")
+                        .contentType(APPLICATION_JSON)
+                        .content(json.writeValueAsString(registerRequest)))
+                        .andExpect(status().isCreated());
+
+        var wrongPasswordRequest = new AuthRequest(email, "SenhaErrada999!");
+        mvc.perform(post("/api/v1/authenticate")
+                        .contentType(APPLICATION_JSON)
+                        .content(json.writeValueAsString(wrongPasswordRequest)))
+                        .andExpect(status().isUnauthorized())
+                        .andExpect(jsonPath("$.status").value("UNAUTHORIZED"))
+                        .andExpect(jsonPath("$.message").value("Credenciais inválidas."))
+                        .andExpect(jsonPath("$.error").isNotEmpty());
+
+        var unknownEmailRequest = new AuthRequest("naoexiste-" + UUID.randomUUID() + "@ifsp.edu.br", "SenhaCorreta123!");
+        mvc.perform(post("/api/v1/authenticate")
+                        .contentType(APPLICATION_JSON)
+                        .content(json.writeValueAsString(unknownEmailRequest)))
+                        .andExpect(status().isUnauthorized())
+                        .andExpect(jsonPath("$.status").value("UNAUTHORIZED"))
+                        .andExpect(jsonPath("$.message").value("Credenciais inválidas."))
+                        .andExpect(jsonPath("$.error").isNotEmpty());
     }
 }
