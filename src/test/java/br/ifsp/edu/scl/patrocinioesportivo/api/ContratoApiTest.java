@@ -100,4 +100,39 @@ class ContratoApiTest extends BaseApiIntegrationTest {
             softly.assertThat(json.getList("historico[0].parcelas.numero", Integer.class)).containsExactly(1);
         });
     }
+
+    @Test
+    @DisplayName("GET /api/v1/contratos/{id} deve retornar 401 sem token valido, 400 para ID invalido e 404 para contrato inexistente")
+    void shouldRejectContractConsultationForUnauthenticatedMalformedAndNonExistentId() {
+        String userToken = authenticateAs(Role.USER);
+
+        Response semToken = givenAnonymous()
+                .get("/api/v1/contratos/{id}", 1L);
+        Response tokenInvalido = givenAuth("token-jwt-invalido")
+                .get("/api/v1/contratos/{id}", 1L);
+        Response idInvalido = givenAuth(userToken)
+                .get("/api/v1/contratos/{id}", "invalido");
+        Response inexistente = givenAuth(userToken)
+                .get("/api/v1/contratos/{id}", 999999L);
+
+        assertSoftly(softly -> {
+            softly.assertThat(semToken.statusCode()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+            softly.assertThat(tokenInvalido.statusCode()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+            assertApiError(
+                    softly,
+                    idInvalido,
+                    HttpStatus.BAD_REQUEST,
+                    "MethodArgumentTypeMismatchException",
+                    "Requisição inválida"
+            );
+            assertApiError(
+                    softly,
+                    inexistente,
+                    HttpStatus.NOT_FOUND,
+                    "ContratoInexistenteError",
+                    "Contrato não encontrado"
+            );
+        });
+    }
 }
+
