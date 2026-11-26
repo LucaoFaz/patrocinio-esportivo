@@ -154,4 +154,47 @@ class PropostaCicloApiTest extends BaseApiIntegrationTest {
             softly.assertThat(persistido.getParcelas()).isEmpty();
         });
     }
+
+    @Test
+    @DisplayName("POST /api/v1/propostas/{id}/recusa deve retornar 401 sem token, 403 para USER, 404 inexistente e 409 ja avaliada")
+    void shouldRejectRefusalForUnauthorizedForbiddenNotFoundAndConflictCases() {
+        String userToken = authenticateAs(Role.USER);
+        String adminToken = authenticateAs(Role.ADMIN);
+
+        long pendenteId = criarPropostaPendente(userToken);
+        Response semToken = givenAnonymous()
+                .post("/api/v1/propostas/{id}/recusa", pendenteId);
+        Response usuarioComum = givenAuth(userToken)
+                .post("/api/v1/propostas/{id}/recusa", pendenteId);
+
+        Response inexistente = givenAuth(adminToken)
+                .post("/api/v1/propostas/{id}/recusa", 999999L);
+
+        long recusadaId = criarPropostaPendente(adminToken);
+        givenAuth(adminToken).post("/api/v1/propostas/{id}/recusa", recusadaId)
+                .then().statusCode(HttpStatus.OK.value());
+        Response reRecusa = givenAuth(adminToken)
+                .post("/api/v1/propostas/{id}/recusa", recusadaId);
+
+        long aprovadaId = criarPropostaPendente(adminToken);
+        givenAuth(adminToken).post("/api/v1/propostas/{id}/aprovacao", aprovadaId)
+                .then().statusCode(HttpStatus.OK.value());
+        Response recusarAprovada = givenAuth(adminToken)
+                .post("/api/v1/propostas/{id}/recusa", aprovadaId);
+
+        assertSoftly(softly -> {
+            softly.assertThat(semToken.statusCode()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+            assertApiError(softly, usuarioComum, HttpStatus.FORBIDDEN, "PermissaoNegadaError", "diretor financeiro");
+            assertApiError(softly, inexistente, HttpStatus.NOT_FOUND, "ContratoInexistenteError", "Proposta não encontrada");
+            assertApiError(softly, reRecusa, HttpStatus.CONFLICT, "TransicaoDeStatusInvalidaError", "propostas pendentes");
+            assertApiError(softly, recusarAprovada, HttpStatus.CONFLICT, "TransicaoDeStatusInvalidaError", "propostas pendentes");
+
+            softly.assertThat(contratoRepository.buscarPorId(pendenteId).orElseThrow().getStatus())
+                    .isEqualTo(StatusContrato.PENDENTE);
+            softly.assertThat(contratoRepository.buscarPorId(recusadaId).orElseThrow().getStatus())
+                    .isEqualTo(StatusContrato.RECUSADO);
+            softly.assertThat(contratoRepository.buscarPorId(aprovadaId).orElseThrow().getStatus())
+                    .isEqualTo(StatusContrato.ATIVO);
+        });
+    }
 }
