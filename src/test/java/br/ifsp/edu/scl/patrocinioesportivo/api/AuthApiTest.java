@@ -1,5 +1,6 @@
 package br.ifsp.edu.scl.patrocinioesportivo.api;
 
+import br.ifsp.edu.scl.patrocinioesportivo.security.auth.AuthRequest;
 import br.ifsp.edu.scl.patrocinioesportivo.security.auth.RegisterUserRequest;
 import br.ifsp.edu.scl.patrocinioesportivo.security.user.Role;
 import br.ifsp.edu.scl.patrocinioesportivo.security.user.UserRepository;
@@ -131,5 +132,34 @@ public class AuthApiTest {
         var persisted = userRepository.findByEmail(email).orElseThrow();
         assertThat(persisted.getName()).isEqualTo("Original");
         assertThat(persisted.getLastname()).isEqualTo("User");
+    }
+
+    @Test
+    @DisplayName("Deve autenticar usuário com credenciais validas retornando 200 e token JWT no payload")
+    void shouldAuthenticateValidUserAndReturn200WithJwtToken() throws Exception {
+        String email = UUID.randomUUID() + "@ifsp.edu.br";
+        var registerRequest = new RegisterUserRequest("Lucas", "Santos", email, "SenhaForte123!");
+
+        mvc.perform(post("/api/v1/register")
+                        .contentType(APPLICATION_JSON)
+                        .content(json.writeValueAsString(registerRequest)
+                        ))
+                        .andExpect(status().isCreated());
+
+        var authRequest = new AuthRequest(email, "SenhaForte123!");
+
+        String responseBody = mvc.perform(post("/api/v1/authenticate")
+                        .contentType(APPLICATION_JSON)
+                        .content(json.writeValueAsString(authRequest)
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isNotEmpty())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String token = json.readTree(responseBody).get("token").asText();
+        assertThat(token).isNotBlank();
+        assertThat(token.split("\\.")).hasSize(3);
     }
 }
