@@ -652,7 +652,94 @@ class ContratoApiTest extends BaseApiIntegrationTest {
                     .containsExactly(1, 2);
         });
     }
+
+    @Test
+    @DisplayName("POST /api/v1/contratos/{id}/renovacao deve retornar 400 para payload invalido, JSON malformado e renovacao antecipada")
+    void shouldRejectContractRenewalWithBadRequestForInvalidPayloadAndEarlyRenewal() {
+        String userToken = authenticateAs(Role.USER);
+        LocalDate hoje = LocalDate.now();
+
+        long contratoTerminoHojeId = salvarContratoReconstituido(
+                StatusContrato.ATIVO,
+                hoje.minusMonths(2),
+                hoje,
+                new BigDecimal("100.00"),
+                new BigDecimal("500.00"),
+                new BigDecimal("150.00"),
+                List.of(ParcelaDePagamento.reconstituir(1, new BigDecimal("500.00"), hoje, true, hoje)),
+                List.of()
+        );
+        long contratoTerminoFuturoId = salvarContratoReconstituido(
+                StatusContrato.ATIVO,
+                hoje.minusMonths(1),
+                hoje.plusDays(15),
+                new BigDecimal("100.00"),
+                new BigDecimal("500.00"),
+                new BigDecimal("150.00"),
+                List.of(ParcelaDePagamento.reconstituir(1, new BigDecimal("500.00"), hoje, true, hoje)),
+                List.of()
+        );
+
+        Response duracaoNula = givenAuth(userToken)
+                .body(Map.of("novaMeta", new BigDecimal("200.00")))
+                .post("/api/v1/contratos/{id}/renovacao", contratoTerminoHojeId);
+        Response duracaoZero = givenAuth(userToken)
+                .body(Map.of("duracaoMeses", 0, "novaMeta", new BigDecimal("200.00")))
+                .post("/api/v1/contratos/{id}/renovacao", contratoTerminoHojeId);
+        Response duracaoNegativa = givenAuth(userToken)
+                .body(Map.of("duracaoMeses", -2, "novaMeta", new BigDecimal("200.00")))
+                .post("/api/v1/contratos/{id}/renovacao", contratoTerminoHojeId);
+        Response metaNula = givenAuth(userToken)
+                .body(Map.of("duracaoMeses", 3))
+                .post("/api/v1/contratos/{id}/renovacao", contratoTerminoHojeId);
+        Response metaZero = givenAuth(userToken)
+                .body(Map.of("duracaoMeses", 3, "novaMeta", BigDecimal.ZERO))
+                .post("/api/v1/contratos/{id}/renovacao", contratoTerminoHojeId);
+        Response metaNegativa = givenAuth(userToken)
+                .body(Map.of("duracaoMeses", 3, "novaMeta", new BigDecimal("-50.00")))
+                .post("/api/v1/contratos/{id}/renovacao", contratoTerminoHojeId);
+        Response jsonMalformado = givenAuth(userToken)
+                .body("{\"duracaoMeses\": \"abc\", \"novaMeta\": 200.00}")
+                .post("/api/v1/contratos/{id}/renovacao", contratoTerminoHojeId);
+        Response antecipadaTerminoHoje = givenAuth(userToken)
+                .body(Map.of("duracaoMeses", 3, "novaMeta", new BigDecimal("200.00")))
+                .post("/api/v1/contratos/{id}/renovacao", contratoTerminoHojeId);
+        Response antecipadaTerminoFuturo = givenAuth(userToken)
+                .body(Map.of("duracaoMeses", 3, "novaMeta", new BigDecimal("200.00")))
+                .post("/api/v1/contratos/{id}/renovacao", contratoTerminoFuturoId);
+
+        assertSoftly(softly -> {
+            assertApiError(softly, duracaoNula, HttpStatus.BAD_REQUEST, "MethodArgumentNotValidException", "duracaoMeses:");
+            assertApiError(softly, duracaoZero, HttpStatus.BAD_REQUEST, "MethodArgumentNotValidException", "duracaoMeses:");
+            assertApiError(softly, duracaoNegativa, HttpStatus.BAD_REQUEST, "MethodArgumentNotValidException", "duracaoMeses:");
+            assertApiError(softly, metaNula, HttpStatus.BAD_REQUEST, "MethodArgumentNotValidException", "novaMeta:");
+            assertApiError(softly, metaZero, HttpStatus.BAD_REQUEST, "MethodArgumentNotValidException", "novaMeta:");
+            assertApiError(softly, metaNegativa, HttpStatus.BAD_REQUEST, "MethodArgumentNotValidException", "novaMeta:");
+            assertApiError(
+                    softly,
+                    jsonMalformado,
+                    HttpStatus.BAD_REQUEST,
+                    "HttpMessageNotReadableException",
+                    "Requisição inválida"
+            );
+            assertApiError(
+                    softly,
+                    antecipadaTerminoHoje,
+                    HttpStatus.BAD_REQUEST,
+                    "PeriodoInvalidoError",
+                    "renovação antecipada"
+            );
+            assertApiError(
+                    softly,
+                    antecipadaTerminoFuturo,
+                    HttpStatus.BAD_REQUEST,
+                    "PeriodoInvalidoError",
+                    "renovação antecipada"
+            );
+        });
+    }
 }
+
 
 
 
