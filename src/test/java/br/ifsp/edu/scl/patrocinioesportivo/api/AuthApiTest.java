@@ -93,7 +93,7 @@ public class AuthApiTest {
                 .content(json.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value("BAD_REQUEST"))
-                .andExpect(jsonPath("$.error").value("MethodArgumentNotValidException"))
+                .andExpect(jsonPath("$.developerMessage").value("MethodArgumentNotValidException"))
                 .andExpect(jsonPath("$.message").isNotEmpty());
     }
 
@@ -127,7 +127,7 @@ public class AuthApiTest {
                 ))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value("CONFLICT"))
-                .andExpect(jsonPath("$.error").value("EntityAlreadyExistsException"))
+                .andExpect(jsonPath("$.developerMessage").value("EntityAlreadyExistsException"))
                 .andExpect(jsonPath("$.message").value("Email already registered: " + email));
 
         var persisted = userRepository.findByEmail(email).orElseThrow();
@@ -174,7 +174,7 @@ public class AuthApiTest {
                         ))
                         .andExpect(status().isBadRequest())
                         .andExpect(jsonPath("$.status").value("BAD_REQUEST"))
-                        .andExpect(jsonPath("$.error").value("MethodArgumentNotValidException"))
+                        .andExpect(jsonPath("$.developerMessage").value("MethodArgumentNotValidException"))
                         .andExpect(jsonPath("$.message").isNotEmpty());
     }
 
@@ -206,7 +206,7 @@ public class AuthApiTest {
                         .andExpect(status().isUnauthorized())
                         .andExpect(jsonPath("$.status").value("UNAUTHORIZED"))
                         .andExpect(jsonPath("$.message").value("Credenciais inválidas."))
-                        .andExpect(jsonPath("$.error").isNotEmpty());
+                        .andExpect(jsonPath("$.developerMessage").isNotEmpty());
 
         var unknownEmailRequest = new AuthRequest("naoexiste-" + UUID.randomUUID() + "@ifsp.edu.br", "SenhaCorreta123!");
         mvc.perform(post("/api/v1/authenticate")
@@ -215,7 +215,7 @@ public class AuthApiTest {
                         .andExpect(status().isUnauthorized())
                         .andExpect(jsonPath("$.status").value("UNAUTHORIZED"))
                         .andExpect(jsonPath("$.message").value("Credenciais inválidas."))
-                        .andExpect(jsonPath("$.error").isNotEmpty());
+                        .andExpect(jsonPath("$.developerMessage").isNotEmpty());
     }
 
     @Test
