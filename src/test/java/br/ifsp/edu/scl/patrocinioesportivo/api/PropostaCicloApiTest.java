@@ -8,6 +8,8 @@ import io.restassured.response.Response;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
@@ -195,6 +197,37 @@ class PropostaCicloApiTest extends BaseApiIntegrationTest {
                     .isEqualTo(StatusContrato.RECUSADO);
             softly.assertThat(contratoRepository.buscarPorId(aprovadaId).orElseThrow().getStatus())
                     .isEqualTo(StatusContrato.ATIVO);
+        });
+    }
+
+    @ParameterizedTest
+    @EnumSource(Role.class)
+    @DisplayName("POST /api/v1/propostas/{id}/cancelamento deve retornar 200 e status CANCELADO para qualquer perfil autenticado")
+    void shouldCancelPendingProposalForAnyAuthenticatedRole(Role role) {
+        String token = authenticateAs(role);
+        long propostaId = criarPropostaPendente(token, new BigDecimal("1800.00"), 2, new BigDecimal("90.00"));
+
+        Response response = givenAuth(token)
+                .post("/api/v1/propostas/{id}/cancelamento", propostaId);
+
+        assertThat(response.statusCode()).isEqualTo(HttpStatus.OK.value());
+        var json = response.jsonPath();
+        var persistido = contratoRepository.buscarPorId(propostaId).orElseThrow();
+
+        assertSoftly(softly -> {
+            softly.assertThat(json.getLong("id")).isEqualTo(propostaId);
+            softly.assertThat(json.getLong("clubeId")).isEqualTo(ContratoTestFixtures.CLUBE_DEMO_ID);
+            softly.assertThat(json.getLong("patrocinadorId")).isEqualTo(ContratoTestFixtures.PATROCINADOR_DEMO_ID);
+            softly.assertThat(json.getString("status")).isEqualTo("CANCELADO");
+            softly.assertThat(json.getObject("valorTotal", BigDecimal.class)).isEqualByComparingTo("1800.00");
+            softly.assertThat(json.getObject("meta", BigDecimal.class)).isEqualByComparingTo("90.00");
+            softly.assertThat(json.getObject("exposicaoAcumulada", BigDecimal.class)).isEqualByComparingTo("0");
+            softly.assertThat(json.getObject("multaRescisoria", BigDecimal.class)).isEqualByComparingTo("0");
+            softly.assertThat(json.getList("parcelas")).isEmpty();
+            softly.assertThat(json.getList("historico")).isEmpty();
+
+            softly.assertThat(persistido.getStatus()).isEqualTo(StatusContrato.CANCELADO);
+            softly.assertThat(persistido.getParcelas()).isEmpty();
         });
     }
 }
