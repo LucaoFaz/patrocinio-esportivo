@@ -162,4 +162,28 @@ public class AuthApiTest {
         assertThat(token).isNotBlank();
         assertThat(token.split("\\.")).hasSize(3);
     }
+
+    @ParameterizedTest
+    @MethodSource("invalidAuthRequests")
+    @DisplayName("Deve retornar 400 e payload de erro quando dados de autenticação forem invalidos")
+    void shouldReturn400WhenAuthenticatePayloadIsInvalid(AuthRequest invalidRequest) throws Exception {
+        mvc.perform(post("/api/v1/authenticate")
+                        .contentType(APPLICATION_JSON)
+                        .content(json.writeValueAsString(invalidRequest)
+                        ))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.status").value("BAD_REQUEST"))
+                        .andExpect(jsonPath("$.error").value("MethodArgumentNotValidException"))
+                        .andExpect(jsonPath("$.message").isNotEmpty());
+    }
+
+    static Stream<Arguments> invalidAuthRequests() {
+        return Stream.of(
+                Arguments.of(new AuthRequest(null, "Senha123!")),
+                Arguments.of(new AuthRequest(" ", "Senha123!")),
+                Arguments.of(new AuthRequest("formato-nao-valido", "Senha123!")),
+                Arguments.of(new AuthRequest("valido@ifsp.edu.br", null)),
+                Arguments.of(new AuthRequest("valido@ifsp.edu.br", ""))
+        );
+    }
 }
