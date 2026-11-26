@@ -10,6 +10,7 @@ import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
 import io.restassured.specification.RequestSpecification;
+import org.assertj.core.api.SoftAssertions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -25,7 +26,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.SoftAssertions.assertSoftly;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("demo")
@@ -103,18 +103,17 @@ public abstract class BaseApiIntegrationTest {
     }
 
     protected void assertApiError(
+            SoftAssertions softly,
             Response response,
             HttpStatus expectedStatus,
             String expectedDeveloperMessage,
             String expectedMessageContains
     ) {
-        assertThat(response.statusCode()).isEqualTo(expectedStatus.value());
+        softly.assertThat(response.statusCode()).isEqualTo(expectedStatus.value());
         var json = response.jsonPath();
-        assertSoftly(softly -> {
-            softly.assertThat(json.getString("status")).isEqualTo(expectedStatus.name());
-            softly.assertThat(json.getString("developerMessage")).isEqualTo(expectedDeveloperMessage);
-            softly.assertThat(json.getString("message")).contains(expectedMessageContains);
-            softly.assertThat(json.getString("timestamp")).isNotBlank();
-        });
+        softly.assertThat(json.getString("status")).isEqualTo(expectedStatus.name());
+        softly.assertThat(json.getString("developerMessage")).isEqualTo(expectedDeveloperMessage);
+        softly.assertThat(json.getString("message")).contains(expectedMessageContains);
+        softly.assertThat(json.getString("timestamp")).isNotBlank();
     }
 }

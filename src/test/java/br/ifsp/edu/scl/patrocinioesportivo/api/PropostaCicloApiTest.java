@@ -74,19 +74,53 @@ class PropostaCicloApiTest extends BaseApiIntegrationTest {
         Response usuarioComum = givenAuth(userToken)
                 .post("/api/v1/propostas/{id}/aprovacao", propostaId);
 
-        assertApiError(
-                usuarioComum,
-                HttpStatus.FORBIDDEN,
-                "PermissaoNegadaError",
-                "diretor financeiro"
-        );
-
         var persistido = contratoRepository.buscarPorId(propostaId).orElseThrow();
         assertSoftly(softly -> {
+            assertApiError(
+                    softly,
+                    usuarioComum,
+                    HttpStatus.FORBIDDEN,
+                    "PermissaoNegadaError",
+                    "diretor financeiro"
+            );
             softly.assertThat(semToken.statusCode()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
             softly.assertThat(tokenInvalido.statusCode()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
             softly.assertThat(persistido.getStatus()).isEqualTo(StatusContrato.PENDENTE);
             softly.assertThat(persistido.getParcelas()).isEmpty();
+        });
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/propostas/{id}/aprovacao deve retornar 404 inexistente, 400 ID invalido e 409 ja avaliada")
+    void shouldRejectApprovalForNonExistentMalformedOrAlreadyEvaluatedProposal() {
+        String adminToken = authenticateAs(Role.ADMIN);
+
+        Response inexistente = givenAuth(adminToken)
+                .post("/api/v1/propostas/{id}/aprovacao", 999999L);
+        Response idInvalido = givenAuth(adminToken)
+                .post("/api/v1/propostas/{id}/aprovacao", "invalido");
+
+        long aprovadaId = criarPropostaPendente(adminToken);
+        givenAuth(adminToken).post("/api/v1/propostas/{id}/aprovacao", aprovadaId)
+                .then().statusCode(HttpStatus.OK.value());
+        Response reAprovacao = givenAuth(adminToken)
+                .post("/api/v1/propostas/{id}/aprovacao", aprovadaId);
+
+        long recusadaId = criarPropostaPendente(adminToken);
+        givenAuth(adminToken).post("/api/v1/propostas/{id}/recusa", recusadaId)
+                .then().statusCode(HttpStatus.OK.value());
+        Response aprovarRecusada = givenAuth(adminToken)
+                .post("/api/v1/propostas/{id}/aprovacao", recusadaId);
+
+        assertSoftly(softly -> {
+            assertApiError(softly, inexistente, HttpStatus.NOT_FOUND, "ContratoInexistenteError", "Proposta não encontrada");
+            assertApiError(softly, idInvalido, HttpStatus.BAD_REQUEST, "MethodArgumentTypeMismatchException", "Requisição inválida");
+            assertApiError(softly, reAprovacao, HttpStatus.CONFLICT, "TransicaoDeStatusInvalidaError", "propostas pendentes");
+            assertApiError(softly, aprovarRecusada, HttpStatus.CONFLICT, "TransicaoDeStatusInvalidaError", "propostas pendentes");
+            softly.assertThat(contratoRepository.buscarPorId(aprovadaId).orElseThrow().getStatus())
+                    .isEqualTo(StatusContrato.ATIVO);
+            softly.assertThat(contratoRepository.buscarPorId(recusadaId).orElseThrow().getStatus())
+                    .isEqualTo(StatusContrato.RECUSADO);
         });
     }
 }
