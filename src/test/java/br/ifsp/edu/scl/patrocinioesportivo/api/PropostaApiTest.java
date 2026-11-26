@@ -7,6 +7,7 @@ import br.ifsp.edu.scl.patrocinioesportivo.support.ContratoTestFixtures;
 import io.restassured.response.Response;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.http.HttpStatus;
@@ -69,4 +70,135 @@ class PropostaApiTest extends BaseApiIntegrationTest {
             softly.assertThat(persistida.getPeriodoContratual().termino()).isEqualTo(termino);
         });
     }
+
+    @Test
+    @DisplayName("POST /api/v1/propostas deve retornar 400 para campos invalidos, JSON malformado, partes iguais e periodo invalido")
+    void shouldRejectProposalSubmissionWithBadRequestForInvalidPayloadAndDomainRules() {
+        String userToken = authenticateAs(Role.USER);
+        LocalDate hoje = LocalDate.now();
+        LocalDate terminoValido = hoje.plusMonths(3);
+
+        Response payloadVazio = givenAuth(userToken)
+                .body("{}")
+                .post("/api/v1/propostas");
+        Response clubeNaoPositivo = givenAuth(userToken)
+                .body(Map.of(
+                        "clubeId", 0L,
+                        "patrocinadorId", ContratoTestFixtures.PATROCINADOR_DEMO_ID,
+                        "valor", new BigDecimal("1000.00"),
+                        "inicio", hoje.toString(),
+                        "termino", terminoValido.toString(),
+                        "meta", new BigDecimal("100.00")
+                ))
+                .post("/api/v1/propostas");
+        Response patrocinadorNegativo = givenAuth(userToken)
+                .body(Map.of(
+                        "clubeId", ContratoTestFixtures.CLUBE_DEMO_ID,
+                        "patrocinadorId", -1L,
+                        "valor", new BigDecimal("1000.00"),
+                        "inicio", hoje.toString(),
+                        "termino", terminoValido.toString(),
+                        "meta", new BigDecimal("100.00")
+                ))
+                .post("/api/v1/propostas");
+        Response valorZero = givenAuth(userToken)
+                .body(Map.of(
+                        "clubeId", ContratoTestFixtures.CLUBE_DEMO_ID,
+                        "patrocinadorId", ContratoTestFixtures.PATROCINADOR_DEMO_ID,
+                        "valor", BigDecimal.ZERO,
+                        "inicio", hoje.toString(),
+                        "termino", terminoValido.toString(),
+                        "meta", new BigDecimal("100.00")
+                ))
+                .post("/api/v1/propostas");
+        Response metaNegativa = givenAuth(userToken)
+                .body(Map.of(
+                        "clubeId", ContratoTestFixtures.CLUBE_DEMO_ID,
+                        "patrocinadorId", ContratoTestFixtures.PATROCINADOR_DEMO_ID,
+                        "valor", new BigDecimal("1000.00"),
+                        "inicio", hoje.toString(),
+                        "termino", terminoValido.toString(),
+                        "meta", new BigDecimal("-10.00")
+                ))
+                .post("/api/v1/propostas");
+        Response dataMalformada = givenAuth(userToken)
+                .body("""
+                        {
+                          "clubeId": 10,
+                          "patrocinadorId": 20,
+                          "valor": 1000.00,
+                          "inicio": "2026-99-99",
+                          "termino": "2027-01-01",
+                          "meta": 100.00
+                        }
+                        """)
+                .post("/api/v1/propostas");
+        Response partesIguais = givenAuth(userToken)
+                .body(Map.of(
+                        "clubeId", ContratoTestFixtures.CLUBE_DEMO_ID,
+                        "patrocinadorId", ContratoTestFixtures.CLUBE_DEMO_ID,
+                        "valor", new BigDecimal("1000.00"),
+                        "inicio", hoje.toString(),
+                        "termino", terminoValido.toString(),
+                        "meta", new BigDecimal("100.00")
+                ))
+                .post("/api/v1/propostas");
+        Response terminoIgualInicio = givenAuth(userToken)
+                .body(Map.of(
+                        "clubeId", ContratoTestFixtures.CLUBE_DEMO_ID,
+                        "patrocinadorId", ContratoTestFixtures.PATROCINADOR_DEMO_ID,
+                        "valor", new BigDecimal("1000.00"),
+                        "inicio", hoje.toString(),
+                        "termino", hoje.toString(),
+                        "meta", new BigDecimal("100.00")
+                ))
+                .post("/api/v1/propostas");
+        Response terminoNoPassado = givenAuth(userToken)
+                .body(Map.of(
+                        "clubeId", ContratoTestFixtures.CLUBE_DEMO_ID,
+                        "patrocinadorId", ContratoTestFixtures.PATROCINADOR_DEMO_ID,
+                        "valor", new BigDecimal("1000.00"),
+                        "inicio", hoje.minusMonths(2).toString(),
+                        "termino", hoje.minusDays(1).toString(),
+                        "meta", new BigDecimal("100.00")
+                ))
+                .post("/api/v1/propostas");
+
+        assertSoftly(softly -> {
+            assertApiError(softly, payloadVazio, HttpStatus.BAD_REQUEST, "MethodArgumentNotValidException", "clubeId:");
+            assertApiError(softly, clubeNaoPositivo, HttpStatus.BAD_REQUEST, "MethodArgumentNotValidException", "clubeId:");
+            assertApiError(softly, patrocinadorNegativo, HttpStatus.BAD_REQUEST, "MethodArgumentNotValidException", "patrocinadorId:");
+            assertApiError(softly, valorZero, HttpStatus.BAD_REQUEST, "MethodArgumentNotValidException", "valor:");
+            assertApiError(softly, metaNegativa, HttpStatus.BAD_REQUEST, "MethodArgumentNotValidException", "meta:");
+            assertApiError(
+                    softly,
+                    dataMalformada,
+                    HttpStatus.BAD_REQUEST,
+                    "HttpMessageNotReadableException",
+                    "Requisição inválida"
+            );
+            assertApiError(
+                    softly,
+                    partesIguais,
+                    HttpStatus.BAD_REQUEST,
+                    "PartesIguaisError",
+                    "partes diferentes"
+            );
+            assertApiError(
+                    softly,
+                    terminoIgualInicio,
+                    HttpStatus.BAD_REQUEST,
+                    "PeriodoInvalidoError",
+                    "período contratual é inválido"
+            );
+            assertApiError(
+                    softly,
+                    terminoNoPassado,
+                    HttpStatus.BAD_REQUEST,
+                    "PeriodoInvalidoError",
+                    "período contratual é inválido"
+            );
+        });
+    }
 }
+
