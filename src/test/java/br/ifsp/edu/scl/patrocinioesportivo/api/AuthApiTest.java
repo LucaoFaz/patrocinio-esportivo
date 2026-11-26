@@ -248,4 +248,20 @@ public class AuthApiTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string("Hello: " + userId));
     }
+
+    @Test
+    @DisplayName("Deve retornar 401 ao acessar hello sem token, com prefixo invalido ou com JWT invalido")
+    void shouldReturn401OnHelloWithoutTokenOrWithInvalidToken() throws Exception {
+        mvc.perform(get("/api/v1/hello"))
+                .andExpect(status().isUnauthorized());
+
+        mvc.perform(get("/api/v1/hello")
+                        .header("Authorization", "Basic credencial-invalida"))
+                .andExpect(status().isUnauthorized());
+
+        mvc.perform(get("/api/v1/hello")
+                        .header("Authorization", "Bearer token.jwt.invalido"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("JWT is not valid or is expired."));
+    }
 }
