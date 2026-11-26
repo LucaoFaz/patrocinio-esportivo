@@ -200,5 +200,69 @@ class PropostaApiTest extends BaseApiIntegrationTest {
             );
         });
     }
+
+    @Test
+    @DisplayName("POST /api/v1/propostas deve retornar 401 sem token valido e 404 para clube ou patrocinador inexistente")
+    void shouldRejectProposalSubmissionForUnauthenticatedAndNonExistentParties() {
+        String userToken = authenticateAs(Role.USER);
+        LocalDate inicio = LocalDate.now();
+        LocalDate termino = inicio.plusMonths(3);
+
+        Map<String, Object> bodyValido = Map.of(
+                "clubeId", ContratoTestFixtures.CLUBE_DEMO_ID,
+                "patrocinadorId", ContratoTestFixtures.PATROCINADOR_DEMO_ID,
+                "valor", new BigDecimal("1000.00"),
+                "inicio", inicio.toString(),
+                "termino", termino.toString(),
+                "meta", new BigDecimal("100.00")
+        );
+
+        Response semToken = givenAnonymous()
+                .body(bodyValido)
+                .post("/api/v1/propostas");
+        Response tokenInvalido = givenAuth("token-jwt-invalido")
+                .body(bodyValido)
+                .post("/api/v1/propostas");
+        Response clubeInexistente = givenAuth(userToken)
+                .body(Map.of(
+                        "clubeId", 999999L,
+                        "patrocinadorId", ContratoTestFixtures.PATROCINADOR_DEMO_ID,
+                        "valor", new BigDecimal("1000.00"),
+                        "inicio", inicio.toString(),
+                        "termino", termino.toString(),
+                        "meta", new BigDecimal("100.00")
+                ))
+                .post("/api/v1/propostas");
+        Response patrocinadorInexistente = givenAuth(userToken)
+                .body(Map.of(
+                        "clubeId", ContratoTestFixtures.CLUBE_DEMO_ID,
+                        "patrocinadorId", 999999L,
+                        "valor", new BigDecimal("1000.00"),
+                        "inicio", inicio.toString(),
+                        "termino", termino.toString(),
+                        "meta", new BigDecimal("100.00")
+                ))
+                .post("/api/v1/propostas");
+
+        assertSoftly(softly -> {
+            softly.assertThat(semToken.statusCode()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+            softly.assertThat(tokenInvalido.statusCode()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+            assertApiError(
+                    softly,
+                    clubeInexistente,
+                    HttpStatus.NOT_FOUND,
+                    "ClubeInexistenteError",
+                    "Clube não encontrado"
+            );
+            assertApiError(
+                    softly,
+                    patrocinadorInexistente,
+                    HttpStatus.NOT_FOUND,
+                    "PatrocinadorInexistenteError",
+                    "Patrocinador não encontrado"
+            );
+        });
+    }
 }
+
 
