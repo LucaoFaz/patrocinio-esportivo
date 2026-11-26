@@ -1,6 +1,7 @@
 package br.ifsp.edu.scl.patrocinioesportivo.ui;
 
 import br.ifsp.edu.scl.patrocinioesportivo.ui.pos.ContratoPageObject;
+import br.ifsp.edu.scl.patrocinioesportivo.ui.pos.EditarPropostaPageObject;
 import br.ifsp.edu.scl.patrocinioesportivo.ui.pos.LoginPageObject;
 import br.ifsp.edu.scl.patrocinioesportivo.ui.pos.VisaoGeralPageObject;
 import org.junit.jupiter.api.DisplayName;
@@ -40,5 +41,16 @@ public class PropostaTest extends BaseSeleniumTest {
         novaProposta.criar("10", "20", "6000", "100", "01072027", "01012027");
 
         assertThat(novaProposta.mensagemErro()).isEqualTo("A data de término precisa ser posterior à data de início.");
+    }
+
+    @Test
+    @DisplayName("Proposta avalida nao deve ser editada mais")
+    void editarPropostaJaAvaliada()
+    {
+        new VisaoGeralPageObject(driver);
+        driver.get(URL_FRONT + "#/propostas/1/editar");
+
+        var editarProposta = new EditarPropostaPageObject(driver);
+        assertThat(editarProposta.mensagemErro()).isEqualTo("Esta proposta já foi avaliada e não pode ser editada.");
     }
 }

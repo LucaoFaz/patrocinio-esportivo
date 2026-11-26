@@ -16,4 +16,22 @@ public class ContratoPageObject extends BasePageObject
     {
         return driver.findElement(By.className("status")).getText();
     }
+
+    public void aprovar()
+    {
+        driver.findElement(By.xpath("//button[text()='Aprovar']")).click();
+        
+        aguardaElemento(By.xpath("//dialog//button[text()='Confirmar']")).click();
+    }
+
+    public String mensagemModal()
+    {
+        return aguardaElemento(By.cssSelector("dialog [role='alert']")).getText();
+    }
+
+    public String mensagemSucesso()
+    {
+        aguardaSumir(By.tagName("dialog"));
+        return driver.findElement(By.className("success")).getText();
+    }
 }

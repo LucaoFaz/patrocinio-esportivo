@@ -29,4 +29,9 @@ public class LoginPageObject extends BasePageObject {
     {
         return aguardaElemento(By.cssSelector("[role='alert']")).getText();
     }
+
+    public boolean arteVisivel()
+    {
+        return driver.findElement(By.tagName("aside")).isDisplayed();
+    }
 }

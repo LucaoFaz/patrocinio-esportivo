@@ -30,4 +30,9 @@ public class BasePageObject {
     {
         return new WebDriverWait(driver, Duration.ofSeconds(10)).until(ExpectedConditions.visibilityOfElementLocated(localizador));
     }
+
+    protected void aguardaSumir(By localizador)
+    {
+        new WebDriverWait(driver, Duration.ofSeconds(10)).until(ExpectedConditions.invisibilityOfElementLocated(localizador));
+    }
 }
