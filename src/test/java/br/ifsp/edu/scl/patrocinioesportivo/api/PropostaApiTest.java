@@ -305,7 +305,161 @@ class PropostaApiTest extends BaseApiIntegrationTest {
             softly.assertThat(persistida.getMetaContratual().valor()).isEqualByComparingTo("420.25");
         });
     }
+
+    @Test
+    @DisplayName("PUT /api/v1/propostas/{id} deve retornar 401, 400, 404 e 409 em cenarios invalidos")
+    void shouldRejectProposalEditionForInvalidAuthPayloadNotFoundAndEvaluatedStatus() {
+        String adminToken = authenticateAs(Role.ADMIN);
+        String userToken = authenticateAs(Role.USER);
+        LocalDate hoje = LocalDate.now();
+        LocalDate terminoValido = hoje.plusMonths(4);
+
+        long pendenteId = criarPropostaPendente(userToken, new BigDecimal("1000.00"), 2, new BigDecimal("100.00"));
+        long aprovadaId = criarContratoAtivo(adminToken);
+
+        long recusadaId = criarPropostaPendente(userToken);
+        givenAuth(adminToken)
+                .post("/api/v1/propostas/{id}/recusa", recusadaId)
+                .then()
+                .statusCode(HttpStatus.OK.value());
+
+        long canceladaId = criarPropostaPendente(userToken);
+        givenAuth(userToken)
+                .post("/api/v1/propostas/{id}/cancelamento", canceladaId)
+                .then()
+                .statusCode(HttpStatus.OK.value());
+
+        Map<String, Object> bodyValido = Map.of(
+                "valor", new BigDecimal("2000.00"),
+                "inicio", hoje.toString(),
+                "termino", terminoValido.toString(),
+                "meta", new BigDecimal("150.00")
+        );
+
+        Response semToken = givenAnonymous()
+                .body(bodyValido)
+                .put("/api/v1/propostas/{id}", pendenteId);
+        Response payloadVazio = givenAuth(userToken)
+                .body("{}")
+                .put("/api/v1/propostas/{id}", pendenteId);
+        Response valorZero = givenAuth(userToken)
+                .body(Map.of(
+                        "valor", BigDecimal.ZERO,
+                        "inicio", hoje.toString(),
+                        "termino", terminoValido.toString(),
+                        "meta", new BigDecimal("150.00")
+                ))
+                .put("/api/v1/propostas/{id}", pendenteId);
+        Response metaNegativa = givenAuth(userToken)
+                .body(Map.of(
+                        "valor", new BigDecimal("2000.00"),
+                        "inicio", hoje.toString(),
+                        "termino", terminoValido.toString(),
+                        "meta", new BigDecimal("-5.00")
+                ))
+                .put("/api/v1/propostas/{id}", pendenteId);
+        Response jsonMalformado = givenAuth(userToken)
+                .body("{\"valor\": \"invalido\"}")
+                .put("/api/v1/propostas/{id}", pendenteId);
+        Response idInvalido = givenAuth(userToken)
+                .body(bodyValido)
+                .put("/api/v1/propostas/{id}", "invalido");
+        Response terminoAntesInicio = givenAuth(userToken)
+                .body(Map.of(
+                        "valor", new BigDecimal("2000.00"),
+                        "inicio", hoje.plusMonths(2).toString(),
+                        "termino", hoje.plusMonths(1).toString(),
+                        "meta", new BigDecimal("150.00")
+                ))
+                .put("/api/v1/propostas/{id}", pendenteId);
+        Response terminoNoPassado = givenAuth(userToken)
+                .body(Map.of(
+                        "valor", new BigDecimal("2000.00"),
+                        "inicio", hoje.minusMonths(2).toString(),
+                        "termino", hoje.minusDays(1).toString(),
+                        "meta", new BigDecimal("150.00")
+                ))
+                .put("/api/v1/propostas/{id}", pendenteId);
+        Response inexistente = givenAuth(userToken)
+                .body(bodyValido)
+                .put("/api/v1/propostas/{id}", 999999L);
+        Response editarAprovada = givenAuth(userToken)
+                .body(bodyValido)
+                .put("/api/v1/propostas/{id}", aprovadaId);
+        Response editarRecusada = givenAuth(userToken)
+                .body(bodyValido)
+                .put("/api/v1/propostas/{id}", recusadaId);
+        Response editarCancelada = givenAuth(userToken)
+                .body(bodyValido)
+                .put("/api/v1/propostas/{id}", canceladaId);
+
+        var persistida = contratoRepository.buscarPorId(pendenteId).orElseThrow();
+        assertSoftly(softly -> {
+            softly.assertThat(semToken.statusCode()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+            assertApiError(softly, payloadVazio, HttpStatus.BAD_REQUEST, "MethodArgumentNotValidException", "valor:");
+            assertApiError(softly, valorZero, HttpStatus.BAD_REQUEST, "MethodArgumentNotValidException", "valor:");
+            assertApiError(softly, metaNegativa, HttpStatus.BAD_REQUEST, "MethodArgumentNotValidException", "meta:");
+            assertApiError(
+                    softly,
+                    jsonMalformado,
+                    HttpStatus.BAD_REQUEST,
+                    "HttpMessageNotReadableException",
+                    "Requisição inválida"
+            );
+            assertApiError(
+                    softly,
+                    idInvalido,
+                    HttpStatus.BAD_REQUEST,
+                    "MethodArgumentTypeMismatchException",
+                    "Requisição inválida"
+            );
+            assertApiError(
+                    softly,
+                    terminoAntesInicio,
+                    HttpStatus.BAD_REQUEST,
+                    "PeriodoInvalidoError",
+                    "período contratual é inválido"
+            );
+            assertApiError(
+                    softly,
+                    terminoNoPassado,
+                    HttpStatus.BAD_REQUEST,
+                    "PeriodoInvalidoError",
+                    "período contratual é inválido"
+            );
+            assertApiError(
+                    softly,
+                    inexistente,
+                    HttpStatus.NOT_FOUND,
+                    "ContratoInexistenteError",
+                    "Proposta não encontrada"
+            );
+            assertApiError(
+                    softly,
+                    editarAprovada,
+                    HttpStatus.CONFLICT,
+                    "TransicaoDeStatusInvalidaError",
+                    "já avaliadas não podem ser editadas"
+            );
+            assertApiError(
+                    softly,
+                    editarRecusada,
+                    HttpStatus.CONFLICT,
+                    "TransicaoDeStatusInvalidaError",
+                    "já avaliadas não podem ser editadas"
+            );
+            assertApiError(
+                    softly,
+                    editarCancelada,
+                    HttpStatus.CONFLICT,
+                    "TransicaoDeStatusInvalidaError",
+                    "já avaliadas não podem ser editadas"
+            );
+            softly.assertThat(persistida.getValorTotal()).isEqualByComparingTo("1000.00");
+        });
+    }
 }
+
 
 
 
