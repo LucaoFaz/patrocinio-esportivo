@@ -311,7 +311,91 @@ class ContratoApiTest extends BaseApiIntegrationTest {
             softly.assertThat(persistido.getExposicaoAcumulada()).isEqualByComparingTo("100.25");
         });
     }
+
+    @Test
+    @DisplayName("POST /api/v1/contratos/{id}/exposicoes deve retornar 401, 400, 404 e 409 em cenarios invalidos sem alterar exposicao")
+    void shouldRejectMediaExposureForInvalidAuthPayloadNotFoundAndConflictCases() {
+        String adminToken = authenticateAs(Role.ADMIN);
+        String userToken = authenticateAs(Role.USER);
+        long contratoAtivoId = criarContratoAtivo(adminToken);
+        long pendenteId = criarPropostaPendente(userToken);
+
+        LocalDate hoje = LocalDate.now();
+        long encerradoId = salvarContratoReconstituido(
+                StatusContrato.ENCERRADO,
+                hoje.minusMonths(2),
+                hoje.plusMonths(1),
+                new BigDecimal("100.00"),
+                new BigDecimal("500.00"),
+                BigDecimal.ZERO,
+                List.of(ParcelaDePagamento.reconstituir(1, new BigDecimal("500.00"), hoje.plusDays(10), false, null)),
+                List.of()
+        );
+
+        Response semToken = givenAnonymous()
+                .body(Map.of("valor", new BigDecimal("25.00")))
+                .post("/api/v1/contratos/{id}/exposicoes", contratoAtivoId);
+        Response valorNulo = givenAuth(userToken)
+                .body("{}")
+                .post("/api/v1/contratos/{id}/exposicoes", contratoAtivoId);
+        Response valorZero = givenAuth(userToken)
+                .body(Map.of("valor", BigDecimal.ZERO))
+                .post("/api/v1/contratos/{id}/exposicoes", contratoAtivoId);
+        Response valorNegativo = givenAuth(userToken)
+                .body(Map.of("valor", new BigDecimal("-10.50")))
+                .post("/api/v1/contratos/{id}/exposicoes", contratoAtivoId);
+        Response jsonMalformado = givenAuth(userToken)
+                .body("{\"valor\": invalido}")
+                .post("/api/v1/contratos/{id}/exposicoes", contratoAtivoId);
+        Response contratoInexistente = givenAuth(userToken)
+                .body(Map.of("valor", new BigDecimal("25.00")))
+                .post("/api/v1/contratos/{id}/exposicoes", 999999L);
+        Response contratoPendente = givenAuth(userToken)
+                .body(Map.of("valor", new BigDecimal("25.00")))
+                .post("/api/v1/contratos/{id}/exposicoes", pendenteId);
+        Response contratoEncerrado = givenAuth(userToken)
+                .body(Map.of("valor", new BigDecimal("25.00")))
+                .post("/api/v1/contratos/{id}/exposicoes", encerradoId);
+
+        var persistido = contratoRepository.buscarPorId(contratoAtivoId).orElseThrow();
+        assertSoftly(softly -> {
+            softly.assertThat(semToken.statusCode()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+            assertApiError(softly, valorNulo, HttpStatus.BAD_REQUEST, "MethodArgumentNotValidException", "valor:");
+            assertApiError(softly, valorZero, HttpStatus.BAD_REQUEST, "MethodArgumentNotValidException", "valor:");
+            assertApiError(softly, valorNegativo, HttpStatus.BAD_REQUEST, "MethodArgumentNotValidException", "valor:");
+            assertApiError(
+                    softly,
+                    jsonMalformado,
+                    HttpStatus.BAD_REQUEST,
+                    "HttpMessageNotReadableException",
+                    "Requisição inválida"
+            );
+            assertApiError(
+                    softly,
+                    contratoInexistente,
+                    HttpStatus.NOT_FOUND,
+                    "ContratoInexistenteError",
+                    "Contrato não encontrado"
+            );
+            assertApiError(
+                    softly,
+                    contratoPendente,
+                    HttpStatus.CONFLICT,
+                    "TransicaoDeStatusInvalidaError",
+                    "não permite registrar exposição midiática"
+            );
+            assertApiError(
+                    softly,
+                    contratoEncerrado,
+                    HttpStatus.CONFLICT,
+                    "TransicaoDeStatusInvalidaError",
+                    "não permite registrar exposição midiática"
+            );
+            softly.assertThat(persistido.getExposicaoAcumulada()).isEqualByComparingTo("0");
+        });
+    }
 }
+
 
 
 
